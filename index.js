@@ -1,5 +1,5 @@
 /*
- *  LoreBook Creator v1.3.1 — SillyTavern Extension
+ *  LoreBook Creator v1.3.2 — SillyTavern Extension
  *  Create World Info / LoreBook entries via LLM with simple & advanced modes.
  *  Full translation support via Chat Translation extension.
  *  Template loading, era/type/scale parameters, per-field LLM generation,
@@ -351,8 +351,19 @@ var PROMPTS = {
         '[OOC: Generate {{COUNT}} NEW lorebook entries to fill gaps.\n' +
         'CRITICAL: IGNORE any existing user persona, user descriptions, or chat characters. Create entirely NEW and ORIGINAL entries.\n\n' +
         'WORLD:\n{{WORLD_PARAMS}}\n\n' +
-        'EXISTING:\n{{EXISTING_SUMMARY}}\n\nAvoid duplicates.\n' +
-        'ONLY JSON:\n{"entries":[...]}\nONLY JSON!]',
+        'EXISTING:\n{{EXISTING_SUMMARY}}\n\nAvoid duplicates.\n\n' +
+        'Each entry MUST have these exact JSON keys:\n' +
+        '- "comment": string (short identifier title / the actual name of the entity)\n' +
+        '- "key": array of 3-6 trigger keywords (REQUIRED, never empty)\n' +
+        '- "keysecondary": array of 0-3 secondary keywords\n' +
+        '- "content": detailed lore text (use [ ] for structured data)\n' +
+        '- "category": one of: ' + ENTRY_CATEGORIES.join(', ') + '\n' +
+        '- "constant": boolean (false for almost all)\n' +
+        '- "order": number (50-950)\n' +
+        '- "position": number (0 for lore, 1 for RP prompts, 4 for constant rules)\n\n' +
+        'Write in the SAME LANGUAGE as the world parameters.\n' +
+        'Respond ONLY valid JSON:\n' +
+        '{"entries":[{"comment":"Name","key":["kw1","kw2","kw3"],"keysecondary":[],"content":"...","category":"...","constant":false,"order":100,"position":0}]}\nONLY JSON!]',
 
     enhanceEntry:
         '[OOC: You are a creative world-building assistant. Your task is to deeply ENHANCE and EXPAND the following LoreBook entry.\n\n' +
