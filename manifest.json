@@ -1,0 +1,10 @@
+{
+    "display_name": "LoreBook Creator",
+    "loading_order": 21,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "User",
+    "version": "1.1.0"
+}

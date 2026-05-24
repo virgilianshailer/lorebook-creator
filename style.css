@@ -1,0 +1,404 @@
+/* ══════════════════════════════════════
+   LoreBook Creator v1.3 — Styles
+   ══════════════════════════════════════ */
+
+/* ── Trigger Button ── */
+#lbc-trigger {
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; cursor: pointer; opacity: .7; transition: opacity .2s;
+}
+#lbc-trigger:hover { opacity: 1; }
+#lbc-trigger i { font-size: 15px; color: var(--SmartThemeBodyColor, #eee); }
+
+/* ══════════════════════════════════════
+   PANEL — Drawer mode (right side)
+   ══════════════════════════════════════ */
+#lbc-panel {
+    position: fixed; top: 0; right: 0;
+    width: 780px; max-width: 96vw; height: 100vh;
+    z-index: 9995; display: flex; flex-direction: column;
+    background: var(--SmartThemeBlurTintColor, #1a1a20);
+    border-left: 1px solid rgba(180, 130, 255, .15);
+    box-shadow: -6px 0 40px rgba(0, 0, 0, .5);
+    transform: translateX(100%);
+    pointer-events: none;
+    transition: transform .3s ease;
+}
+#lbc-panel.lbc-open {
+    transform: translateX(0);
+    pointer-events: auto;
+}
+
+/* ══════════════════════════════════════
+   PANEL — Center mode (modal)
+   ══════════════════════════════════════ */
+#lbc-panel.lbc-mode-center {
+    top: 50%; left: 50%; right: auto;
+    width: 900px; max-width: 96vw; height: 90vh; max-height: 94vh;
+    border-radius: 14px;
+    border: 1px solid rgba(180, 130, 255, .15);
+    box-shadow: 0 12px 60px rgba(0, 0, 0, .6);
+    transform: translate(-50%, -50%) scale(.96);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .25s ease, opacity .2s ease;
+}
+#lbc-panel.lbc-mode-center.lbc-open {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Overlay */
+#lbc-panel-overlay {
+    position: fixed; inset: 0; z-index: 9994;
+    background: rgba(0, 0, 0, .4); backdrop-filter: blur(2px);
+    display: none; pointer-events: none;
+}
+#lbc-panel-overlay.lbc-open { display: block; pointer-events: auto; }
+
+/* ── Header ── */
+.lbc-header {
+    display: flex; align-items: center; padding: 10px 16px;
+    background: linear-gradient(135deg, rgba(180, 130, 255, .06), rgba(140, 100, 255, .02));
+    border-bottom: 1px solid rgba(180, 130, 255, .1);
+    flex-shrink: 0; gap: 8px;
+}
+.lbc-header-title {
+    font-weight: 700; font-size: 15px;
+    color: var(--SmartThemeBodyColor, #eee); flex: 1;
+}
+.lbc-header-title i { color: rgba(180, 130, 255, .7); margin-right: 6px; }
+.lbc-hdr-btn {
+    width: 30px; height: 30px; padding: 0 !important;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; border-radius: 8px !important;
+}
+.lbc-btn-tr-active {
+    background: rgba(52, 152, 219, .15) !important;
+    color: #3498db !important;
+}
+
+/* ── Tabs ── */
+.lbc-tabs {
+    display: flex; border-bottom: 1px solid rgba(255, 255, 255, .06);
+    flex-shrink: 0; background: rgba(0, 0, 0, .1); overflow-x: auto;
+}
+.lbc-tab {
+    flex: 1; min-width: 0; padding: 8px 6px; text-align: center;
+    font-size: 11.5px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .4px; color: rgba(255, 255, 255, .4);
+    cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all .15s; white-space: nowrap;
+}
+.lbc-tab:hover { color: rgba(255, 255, 255, .7); }
+.lbc-tab.active {
+    color: rgba(180, 130, 255, .9);
+    border-bottom-color: rgba(180, 130, 255, .6);
+}
+
+/* ── Body ── */
+.lbc-body { flex: 1; overflow-y: auto; padding: 14px 16px; }
+
+/* ── Mode switch ── */
+.lbc-mode-switch {
+    display: flex; gap: 0; border-radius: 8px; overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .08); margin-bottom: 12px;
+}
+.lbc-mode-btn {
+    flex: 1; padding: 7px 10px; text-align: center; font-size: 12px;
+    font-weight: 600; cursor: pointer; background: rgba(0, 0, 0, .15);
+    color: rgba(255, 255, 255, .4); transition: all .15s;
+}
+.lbc-mode-btn:hover { color: rgba(255, 255, 255, .6); }
+.lbc-mode-btn.active { background: rgba(180, 130, 255, .12); color: rgba(180, 130, 255, .9); }
+
+/* ── Section titles ── */
+.lbc-section-title {
+    font-weight: 700; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .5px; color: rgba(180, 130, 255, .55);
+    margin: 14px 0 8px; display: flex; align-items: center; gap: 6px;
+}
+.lbc-section-title:first-child { margin-top: 0; }
+
+/* ── Fields ── */
+.lbc-field { margin-bottom: 10px; }
+.lbc-field-label {
+    display: flex; align-items: center;
+    font-size: 12px; font-weight: 600;
+    color: rgba(255, 255, 255, .6);
+    margin-bottom: 3px; gap: 4px;
+}
+.lbc-field-label .lbc-lock-btn {
+    cursor: pointer; font-size: 11px; opacity: .3;
+    transition: opacity .15s; margin-left: 2px;
+}
+.lbc-field-label .lbc-lock-btn:hover { opacity: .7; }
+.lbc-field-label .lbc-lock-btn.locked { opacity: .9; color: #e8a430; }
+
+/* Кнопка генерации (кубик) */
+.lbc-field-label .lbc-gen-field-btn {
+    margin-left: auto; font-size: 10px; padding: 1px 6px;
+    border-radius: 4px; cursor: pointer; opacity: .5;
+    transition: opacity .15s;
+    background: rgba(180, 130, 255, .08);
+    border: 1px solid rgba(180, 130, 255, .15);
+    color: rgba(180, 130, 255, .8);
+}
+.lbc-field-label .lbc-gen-field-btn:hover { opacity: 1; }
+
+/* Кнопка Add More (Плюс) для полей */
+.lbc-field-label .lbc-addmore-field-btn {
+    margin-left: 4px; font-size: 10px; padding: 1px 6px;
+    border-radius: 4px; cursor: pointer; opacity: .6;
+    transition: opacity .15s, background .15s;
+    background: rgba(46, 204, 113, .08);
+    border: 1px solid rgba(46, 204, 113, .2);
+    color: #2ecc71;
+}
+.lbc-field-label .lbc-addmore-field-btn:hover { 
+    opacity: 1; background: rgba(46, 204, 113, .15); 
+}
+
+/* Кнопка Enhance & Expand для полей */
+.lbc-field-label .lbc-enhance-field-btn {
+    margin-left: 4px; font-size: 10px; padding: 1px 6px;
+    border-radius: 4px; cursor: pointer; opacity: .6;
+    transition: opacity .15s, background .15s;
+    background: rgba(241, 196, 15, .08);
+    border: 1px solid rgba(241, 196, 15, .2);
+    color: #f39c12;
+}
+.lbc-field-label .lbc-enhance-field-btn:hover { 
+    opacity: 1; background: rgba(241, 196, 15, .15); 
+}
+
+/* Прижимаем первую кнопку вправо, если нет кубика */
+.lbc-field-label .lbc-addmore-field-btn:first-of-type,
+.lbc-field-label .lbc-enhance-field-btn:first-of-type {
+    margin-left: auto;
+}
+
+.lbc-input, .lbc-textarea, .lbc-select {
+    width: 100%; padding: 7px 10px; font-size: 13px;
+    border-radius: 8px; background: rgba(0, 0, 0, .2);
+    border: 1px solid rgba(255, 255, 255, .08);
+    color: var(--SmartThemeBodyColor, #eee);
+    outline: none; transition: border-color .15s; font-family: inherit;
+}
+.lbc-input:focus, .lbc-textarea:focus, .lbc-select:focus {
+    border-color: rgba(180, 130, 255, .35);
+}
+.lbc-textarea { resize: vertical; min-height: 60px; line-height: 1.5; }
+.lbc-select { cursor: pointer; appearance: auto; }
+.lbc-input-row { display: flex; gap: 8px; }
+.lbc-input-row .lbc-field { flex: 1; min-width: 0; }
+
+/* ── Scale slider ── */
+.lbc-scale-wrap {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+}
+.lbc-scale-wrap input[type="range"] {
+    flex: 1; accent-color: rgba(180, 130, 255, .7);
+}
+.lbc-scale-label {
+    font-size: 12px; font-weight: 600; color: rgba(180, 130, 255, .7);
+    min-width: 100px; text-align: right;
+}
+.lbc-scale-desc {
+    font-size: 10px; color: rgba(255, 255, 255, .35); margin-bottom: 10px;
+}
+
+/* ── Entry Cards ── */
+.lbc-entry-card {
+    background: rgba(0, 0, 0, .15);
+    border: 1px solid rgba(255, 255, 255, .06);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+    transition: border-color .15s;
+}
+.lbc-entry-card:hover {
+    border-color: rgba(180, 130, 255, .2);
+}
+.lbc-entry-card-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    cursor: pointer;
+}
+.lbc-entry-card-header .lbc-entry-expand {
+    font-size: 12px; opacity: .4; transition: transform .2s, opacity .15s;
+}
+.lbc-entry-card-header:hover .lbc-entry-expand { opacity: .8; }
+.lbc-entry-card.lbc-collapsed .lbc-entry-expand { transform: rotate(-90deg); }
+.lbc-entry-card.lbc-collapsed .lbc-entry-card-body { display: none; }
+
+.lbc-entry-title {
+    flex: 1; font-weight: 600; font-size: 13px;
+    color: rgba(180, 130, 255, .8);
+}
+.lbc-entry-category {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px;
+    background: rgba(180, 130, 255, .08); color: rgba(180, 130, 255, .6);
+    border: 1px solid rgba(180, 130, 255, .15);
+}
+.lbc-entry-actions { display: flex; gap: 4px; }
+.lbc-entry-actions .lbc-micro-btn {
+    font-size: 10px; padding: 2px 6px; border-radius: 4px; cursor: pointer;
+    background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08);
+    color: rgba(255, 255, 255, .5); transition: all .15s;
+}
+.lbc-entry-actions .lbc-micro-btn:hover {
+    background: rgba(180, 130, 255, .1); color: rgba(180, 130, 255, .8);
+}
+
+/* ── Enhance Entry Button (List) ── */
+.lbc-entry-actions .lbc-entry-enhance {
+    color: #e8a430 !important;
+}
+.lbc-entry-actions .lbc-entry-enhance:hover {
+    background: rgba(232, 164, 48, .15) !important;
+    color: #f39c12 !important;
+}
+
+.lbc-entry-card-body { margin-top: 8px; }
+
+.lbc-entry-keys {
+    display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px;
+}
+.lbc-entry-key {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px;
+    background: rgba(46, 204, 113, .08); color: rgba(46, 204, 113, .7);
+    border: 1px solid rgba(46, 204, 113, .15);
+}
+
+.lbc-entry-content-preview {
+    font-size: 11px; color: rgba(255, 255, 255, .4);
+    line-height: 1.5; max-height: 60px; overflow: hidden;
+    white-space: pre-wrap; word-break: break-word;
+}
+
+/* ── Category Chips ── */
+.lbc-cat-chips {
+    display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px;
+}
+.lbc-cat-chip {
+    padding: 4px 12px; font-size: 11px; border-radius: 12px; cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, .08); background: rgba(255, 255, 255, .03);
+    color: rgba(255, 255, 255, .5); transition: all .15s;
+}
+.lbc-cat-chip:hover { border-color: rgba(180, 130, 255, .2); }
+.lbc-cat-chip.active {
+    background: rgba(180, 130, 255, .12); border-color: rgba(180, 130, 255, .35);
+    color: rgba(180, 130, 255, .9);
+}
+
+/* ── Footer ── */
+.lbc-footer {
+    display: flex; align-items: center; gap: 6px; padding: 10px 16px;
+    border-top: 1px solid rgba(180, 130, 255, .08);
+    background: rgba(0, 0, 0, .08); flex-shrink: 0; flex-wrap: wrap;
+}
+.lbc-footer .menu_button {
+    font-size: 12px !important; padding: 6px 14px !important; border-radius: 8px !important;
+}
+.lbc-footer-spacer { flex: 1; }
+.lbc-btn-primary {
+    background: rgba(180, 130, 255, .12) !important; color: rgba(180, 130, 255, .9) !important;
+    border: 1px solid rgba(180, 130, 255, .25) !important;
+}
+.lbc-btn-primary:hover { background: rgba(180, 130, 255, .22) !important; }
+.lbc-btn-success {
+    background: rgba(46, 204, 113, .12) !important; color: #2ecc71 !important;
+    border: 1px solid rgba(46, 204, 113, .25) !important;
+}
+.lbc-btn-success:hover { background: rgba(46, 204, 113, .22) !important; }
+.lbc-btn-danger {
+    background: rgba(231, 76, 60, .08) !important; color: rgba(231, 76, 60, .7) !important;
+    border: 1px solid rgba(231, 76, 60, .15) !important;
+}
+.lbc-btn-danger:hover { background: rgba(231, 76, 60, .18) !important; color: rgba(231, 76, 60, .9) !important; }
+.lbc-btn-warning {
+    background: rgba(241, 196, 15, .08) !important; color: rgba(241, 196, 15, .7) !important;
+    border: 1px solid rgba(241, 196, 15, .15) !important;
+}
+.lbc-btn-warning:hover { background: rgba(241, 196, 15, .18) !important; color: rgba(241, 196, 15, .9) !important; }
+
+/* ── Enhance Entry Button (Editor) ── */
+#lbc-editor-enhance {
+    background: rgba(241, 196, 15, .08) !important;
+    color: #f39c12 !important;
+    border: 1px solid rgba(241, 196, 15, .2) !important;
+}
+#lbc-editor-enhance:hover {
+    background: rgba(241, 196, 15, .15) !important;
+}
+
+/* ── Status bar ── */
+.lbc-status-bar { padding: 6px 12px; font-size: 11px; text-align: center; flex-shrink: 0; }
+.lbc-status-bar.info { background: rgba(180, 130, 255, .08); color: rgba(180, 130, 255, .7); }
+.lbc-status-bar.success { background: rgba(46, 204, 113, .08); color: rgba(46, 204, 113, .7); }
+.lbc-status-bar.error { background: rgba(231, 76, 60, .08); color: rgba(231, 76, 60, .7); }
+
+.lbc-generating i { animation: lbc-spin .8s linear infinite; }
+@keyframes lbc-spin { to { transform: rotate(360deg); } }
+
+/* ── Settings ── */
+.lbc-srow {
+    padding: 4px 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.lbc-srow label { flex: 1; min-width: 0; font-size: 13px; }
+.lbc-srow select { max-width: 220px; }
+
+/* ── Template Info ── */
+.lbc-template-info {
+    background: rgba(180, 130, 255, .05);
+    border: 1px solid rgba(180, 130, 255, .15);
+    border-radius: 8px; padding: 8px 12px; margin-bottom: 10px;
+    font-size: 11px; color: rgba(180, 130, 255, .6);
+}
+.lbc-template-info strong { color: rgba(180, 130, 255, .8); }
+
+/* ── Entry Editor ── */
+.lbc-entry-editor {
+    position: absolute; inset: 0; z-index: 10;
+    background: var(--SmartThemeBlurTintColor, #1a1a20);
+    display: flex; flex-direction: column;
+}
+
+/* ── Stats bar ── */
+.lbc-stats-bar {
+    display: flex; gap: 10px; flex-wrap: wrap; padding: 6px 0;
+    font-size: 11px; color: rgba(255, 255, 255, .4);
+}
+.lbc-stat { display: flex; align-items: center; gap: 4px; }
+.lbc-stat-num { font-weight: 700; color: rgba(180, 130, 255, .7); }
+
+/* ── Number inputs ── */
+.lbc-num-input {
+    width: 70px; padding: 4px 8px; font-size: 12px;
+    border-radius: 6px; background: rgba(0, 0, 0, .2);
+    border: 1px solid rgba(255, 255, 255, .08);
+    color: var(--SmartThemeBodyColor, #eee);
+    outline: none; text-align: center;
+}
+
+/* ── Checkbox inline ── */
+.lbc-check-row {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: rgba(255, 255, 255, .5);
+    margin-bottom: 6px;
+}
+.lbc-check-row input[type="checkbox"] {
+    accent-color: rgba(180, 130, 255, .7);
+}
+
+/* ── Simple idea textarea ── */
+.lbc-simple-idea { min-height: 120px; }
+
+/* Scrollbar */
+.lbc-body::-webkit-scrollbar { width: 6px; }
+.lbc-body::-webkit-scrollbar-track { background: transparent; }
+.lbc-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .08); border-radius: 3px; }
+
+@media (max-width: 640px) {
+    #lbc-panel { width: 100vw; }
+    #lbc-panel.lbc-mode-center { width: 98vw; height: 94vh; }
+}
