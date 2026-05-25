@@ -1,5 +1,5 @@
 /*
- *  LoreBook Creator v1.3.1 — SillyTavern Extension
+ *  LoreBook Creator v1.4.0 — SillyTavern Extension
  *  Create World Info / LoreBook entries via LLM with simple & advanced modes.
  *  Full translation support via Chat Translation extension.
  *  Template loading, era/type/scale parameters, per-field LLM generation,
@@ -94,6 +94,11 @@ var UI = {
     bookImported: 'LoreBook imported',
     bookImportReplace: 'Replace current entries with the imported LoreBook?\n\nOK = replace all\nCancel = add imported entries to the current ones',
     noEntriesInFile: 'No entries found in this file.',
+    reconstructFields: 'Reconstruct Fields',
+    reconstructConfirm: 'Analyze the current entries and fill in the Overview / World / Lore fields?\n\nThis overwrites those fields (except locked ones) based on your entries.',
+    reconstructing: 'Reconstructing world fields from entries...',
+    reconstructDone: 'world fields reconstructed!',
+    noEntriesToReconstruct: 'No entries to analyze. Generate or import some first.',
     describeWorld: 'Describe Your World',
     ideaPlaceholder: 'Describe your world/setting idea in a few sentences or paragraphs...',
     templateLoaded: 'Template loaded',
@@ -368,6 +373,28 @@ var PROMPTS = {
         'Write in the SAME LANGUAGE as the world parameters.\n' +
         'Respond ONLY valid JSON:\n' +
         '{"entries":[{"comment":"Name","key":["kw1","kw2","kw3"],"keysecondary":[],"content":"...","category":"...","constant":false,"order":100,"position":0}]}\nONLY JSON!]',
+
+    reconstructWorld:
+        '[OOC: You are a world-building analyst. Below is a set of existing LoreBook entries. ' +
+        'Read them carefully and INFER the high-level world description fields from them. ' +
+        'Do NOT invent facts that contradict the entries — summarize and synthesize what is actually there.\n\n' +
+        'EXISTING ENTRIES:\n{{ENTRIES_SUMMARY}}\n\n' +
+        'Produce a JSON object describing the overall world. Fields:\n' +
+        '- "worldName": a fitting name for this world/setting (short)\n' +
+        '- "worldDescription": 2-4 sentence overview of the setting\n' +
+        '- "worldType": EXACTLY one of: realistic, fantasy, scifi, horror, postapoc, urban_fantasy, steampunk, mythological, custom\n' +
+        '- "era": EXACTLY one of: prehistoric, ancient, medieval, renaissance, early_modern, industrial, modern, near_future, far_future, timeless, custom\n' +
+        '- "tone": the atmosphere/mood of the setting (short phrase)\n' +
+        '- "themes": key recurring themes (comma-separated)\n' +
+        '- "mainConflict": the central tension or conflict of the world\n' +
+        '- "geography": notable places / the physical setting (summary)\n' +
+        '- "factions": the major factions or power groups (summary)\n' +
+        '- "magicSystem": how magic/special powers work (or "None" if not applicable)\n' +
+        '- "techLevel": the level/kind of technology present\n' +
+        '- "history": key historical background drawn from the entries\n' +
+        '- "coreRules": the fundamental rules/laws that govern this world\n\n' +
+        'Write in the SAME LANGUAGE as the entries. Leave a field as an empty string only if the entries truly say nothing about it.\n' +
+        'Respond ONLY with valid JSON. ONLY JSON!]',
 
     enhanceEntry:
         '[OOC: You are a creative world-building assistant. Your task is to deeply ENHANCE and EXPAND the following LoreBook entry.\n\n' +
@@ -836,6 +863,59 @@ async function doAdvancedGenerate() {
     lbcData.entries = normalizeEntries(data.entries);
     await translateEntriesIfNeeded(lbcData.entries);
     return data;
+}
+
+/* Reconstruct the Overview/World/Lore fields by analyzing the current entries.
+   Useful after importing an existing LoreBook: fills in worldName, type, era,
+   tone, factions, history, core rules, etc. Locked fields are never overwritten. */
+async function doReconstructWorld() {
+    if (!genQuiet) throw new Error(T('noLLM'));
+    if (!lbcData.entries.length) throw new Error(T('noEntriesToReconstruct'));
+
+    var prompt = PROMPTS.reconstructWorld.replace('{{ENTRIES_SUMMARY}}', getExistingEntriesSummary());
+
+    var raw = await lbcGenQuiet(prompt);
+    var data = parseJSON(raw);
+    if (!data) throw new Error('Failed to parse reconstruction.');
+
+    // Validate select-type fields against known IDs.
+    if (data.worldType && !WORLD_TYPES.find(function (t) { return t.id === data.worldType; })) data.worldType = 'custom';
+    if (data.era && !ERA_PRESETS.find(function (e) { return e.id === data.era; })) data.era = 'custom';
+
+    // Map of returned keys -> lbcData fields (all live in Overview/World/Lore tabs).
+    var fieldMap = {
+        worldName: 'worldName', worldDescription: 'worldDescription',
+        worldType: 'worldType', era: 'era', tone: 'tone', themes: 'themes',
+        mainConflict: 'mainConflict', geography: 'geography', factions: 'factions',
+        magicSystem: 'magicSystem', techLevel: 'techLevel', history: 'history',
+        coreRules: 'coreRules'
+    };
+
+    var applied = 0;
+    for (var key in fieldMap) {
+        if (!fieldMap.hasOwnProperty(key)) continue;
+        var target = fieldMap[key];
+        // Never overwrite a locked field.
+        if (lbcData.locked && lbcData.locked[target]) continue;
+        var val = data[key];
+        if (val === undefined || val === null) continue;
+        if (typeof val === 'string' && !val.trim()) continue;
+        lbcData[target] = (typeof val === 'string') ? val : String(val);
+        applied++;
+    }
+
+    // Translate the freshly filled text fields if translation is active.
+    if (lbcData._translated && translateFn) {
+        for (var k in fieldMap) {
+            if (!fieldMap.hasOwnProperty(k)) continue;
+            var tf = fieldMap[k];
+            if (lbcData.locked && lbcData.locked[tf]) continue;
+            if (tf === 'worldType' || tf === 'era') continue; // these are IDs, not prose
+            if (lbcData[tf]) lbcData[tf] = await tr(lbcData[tf]);
+        }
+    }
+
+    return { applied: applied };
 }
 
 async function doGenerateField(fieldKey, fieldLabel) {
@@ -1321,6 +1401,20 @@ function bindPanelEvents() {
         lbcBusy = false;
     });
 
+    $(document).on('click', '.lbc-reconstruct-btn', async function () {
+        if (lbcBusy) return;
+        if (!confirm(T('reconstructConfirm'))) return;
+        lbcBusy = true;
+        $(this).html('<i class="fa-solid fa-circle-notch fa-spin"></i> ' + esc(T('reconstructFields')));
+        showStatus(T('reconstructing'), 'info');
+        try {
+            var res = await doReconstructWorld();
+            renderBody();
+            showStatus(res.applied + ' ' + T('reconstructDone'), 'success');
+        } catch (e) { showStatus(e.message, 'error'); }
+        lbcBusy = false;
+    });
+
     $(document).on('click', '.lbc-addmore-field-btn', async function () {
         if (lbcBusy) return;
         var key = $(this).data('field'), label = $(this).data('label');
@@ -1764,6 +1858,9 @@ function renderEntries($b) {
         h += '<p>' + esc(T('noEntries')) + '</p></div>';
     } else {
         h += renderEntriesStats();
+        h += '<div style="margin:6px 0 10px">';
+        h += '<button class="menu_button lbc-reconstruct-btn" style="font-size:11px!important;padding:5px 12px!important;border-radius:7px!important" title="' + esc(T('reconstructConfirm')) + '"><i class="fa-solid fa-wand-sparkles"></i> ' + esc(T('reconstructFields')) + '</button>';
+        h += '</div>';
         h += '<div class="lbc-cat-chips">';
         h += '<div class="lbc-cat-chip' + (lbcData.categoryFilter === 'all' ? ' active' : '') + '" data-cat="all">' + esc(T('allCat')) + '</div>';
         var cats = {};
