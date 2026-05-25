@@ -1403,7 +1403,6 @@ function bindPanelEvents() {
 
     $(document).on('click', '.lbc-reconstruct-btn', async function () {
         if (lbcBusy) return;
-        if (!confirm(T('reconstructConfirm'))) return;
         lbcBusy = true;
         $(this).html('<i class="fa-solid fa-circle-notch fa-spin"></i> ' + esc(T('reconstructFields')));
         showStatus(T('reconstructing'), 'info');
@@ -1857,9 +1856,9 @@ function renderEntries($b) {
         h += '<i class="fa-solid fa-book-open" style="font-size:48px;display:block;margin-bottom:12px"></i>';
         h += '<p>' + esc(T('noEntries')) + '</p></div>';
     } else {
+        h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
         h += renderEntriesStats();
-        h += '<div style="margin:6px 0 10px">';
-        h += '<button class="menu_button lbc-reconstruct-btn" style="font-size:11px!important;padding:5px 12px!important;border-radius:7px!important" title="' + esc(T('reconstructConfirm')) + '"><i class="fa-solid fa-wand-sparkles"></i> ' + esc(T('reconstructFields')) + '</button>';
+        h += '<button class="menu_button lbc-reconstruct-btn" style="font-size:11px!important;padding:5px 12px!important;border-radius:7px!important;white-space:nowrap" title="' + esc(T('reconstructConfirm')) + '"><i class="fa-solid fa-wand-sparkles"></i> ' + esc(T('reconstructFields')) + '</button>';
         h += '</div>';
         h += '<div class="lbc-cat-chips">';
         h += '<div class="lbc-cat-chip' + (lbcData.categoryFilter === 'all' ? ' active' : '') + '" data-cat="all">' + esc(T('allCat')) + '</div>';
