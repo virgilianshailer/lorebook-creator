@@ -136,7 +136,7 @@
 .lbc-field-label .lbc-lock-btn:hover { opacity: .7; }
 .lbc-field-label .lbc-lock-btn.locked { opacity: .9; color: #e8a430; }
 
-/* Кнопка генерации (кубик) */
+/* Generate button (dice) */
 .lbc-field-label .lbc-gen-field-btn {
     margin-left: auto; font-size: 10px; padding: 1px 6px;
     border-radius: 4px; cursor: pointer; opacity: .5;
@@ -147,7 +147,7 @@
 }
 .lbc-field-label .lbc-gen-field-btn:hover { opacity: 1; }
 
-/* Кнопка Add More (Плюс) для полей */
+/* Add More (plus) button for fields */
 .lbc-field-label .lbc-addmore-field-btn {
     margin-left: 4px; font-size: 10px; padding: 1px 6px;
     border-radius: 4px; cursor: pointer; opacity: .6;
@@ -160,7 +160,7 @@
     opacity: 1; background: rgba(46, 204, 113, .15); 
 }
 
-/* Кнопка Enhance & Expand для полей */
+/* Enhance & Expand button for fields */
 .lbc-field-label .lbc-enhance-field-btn {
     margin-left: 4px; font-size: 10px; padding: 1px 6px;
     border-radius: 4px; cursor: pointer; opacity: .6;
@@ -173,7 +173,7 @@
     opacity: 1; background: rgba(241, 196, 15, .15); 
 }
 
-/* Прижимаем первую кнопку вправо, если нет кубика */
+/* Pin the first button to the right when there is no dice button */
 .lbc-field-label .lbc-addmore-field-btn:first-of-type,
 .lbc-field-label .lbc-enhance-field-btn:first-of-type {
     margin-left: auto;
@@ -298,6 +298,8 @@
 }
 .lbc-footer .menu_button {
     font-size: 12px !important; padding: 6px 14px !important; border-radius: 8px !important;
+    white-space: nowrap; flex-shrink: 0; line-height: 1.2;
+    display: inline-flex; align-items: center; gap: 6px;
 }
 .lbc-footer-spacer { flex: 1; }
 .lbc-btn-primary {
