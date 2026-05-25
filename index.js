@@ -44,6 +44,7 @@ var lbcData = {
     history: '',
     coreRules: '',
     entries: [],
+    customCategories: [],
     templateData: null,
     templateName: '',
     locked: {},
@@ -131,6 +132,8 @@ var UI = {
     genAllParams: 'Generate All Parameters',
     noEntries: 'No entries yet. Generate entries using the Generate button, or add individual entries below.',
     addEntryByCat: 'Add Entry by Category',
+    customCat: '+ Custom',
+    customCatPrompt: 'Enter a custom category name (e.g. "Trading Psychology", "Deity", "Bloodline"):',
     editEntry: 'Edit Entry',
     back: 'Back',
     save: 'Save',
@@ -1377,6 +1380,16 @@ function bindPanelEvents() {
                 // Carry over the lorebook name if present.
                 if (json._name || json.name) lbcData.worldName = json._name || json.name;
 
+                // Surface any non-builtin categories from the import as reusable buttons.
+                if (!lbcData.customCategories) lbcData.customCategories = [];
+                lbcData.entries.forEach(function (en) {
+                    var c = (en.category || '').trim(); if (!c) return;
+                    var lc = c.toLowerCase();
+                    var builtin = ENTRY_CATEGORIES.some(function (x) { return x.toLowerCase() === lc; });
+                    var have = lbcData.customCategories.some(function (x) { return x.toLowerCase() === lc; });
+                    if (!builtin && !have) lbcData.customCategories.push(c);
+                });
+
                 // Jump to the entries view so the user sees what was loaded.
                 lbcData.mode = 'advanced';
                 lbcData.activeTab = 'entries';
@@ -1469,8 +1482,10 @@ function bindPanelEvents() {
         $('#lbc-scale-desc').text(sc.desc);
     });
 
-    $(document).on('click', '.lbc-add-entry-cat', async function () {
+    $(document).on('click', '.lbc-add-entry-cat', async function (ev) {
         if (lbcBusy) return;
+        // Ignore clicks that landed on the inline remove (×) of a custom-category pill.
+        if ($(ev.target).closest('.lbc-del-custom-cat').length) return;
         var cat = $(this).data('cat');
         lbcBusy = true;
         $(this).prop('disabled', true).html('<i class="fa-solid fa-circle-notch fa-spin"></i>');
@@ -1479,6 +1494,37 @@ function bindPanelEvents() {
             renderBody(); showStatus(cat + ' ' + T('entryCreated'), 'success');
         } catch (e) { showStatus(e.message, 'error'); }
         lbcBusy = false;
+    });
+
+    $(document).on('click', '.lbc-add-entry-custom', async function () {
+        if (lbcBusy) return;
+        var cat = prompt(T('customCatPrompt'), '');
+        if (cat === null) return;          // user cancelled
+        cat = (cat || '').trim();
+        if (!cat) return;                  // empty name
+
+        // Remember it as a reusable button (skip built-ins and case-insensitive dupes).
+        if (!lbcData.customCategories) lbcData.customCategories = [];
+        var lc = cat.toLowerCase();
+        var isBuiltin = ENTRY_CATEGORIES.some(function (c) { return c.toLowerCase() === lc; });
+        var exists = lbcData.customCategories.some(function (c) { return c.toLowerCase() === lc; });
+        if (!isBuiltin && !exists) lbcData.customCategories.push(cat);
+
+        lbcBusy = true;
+        var $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="fa-solid fa-circle-notch fa-spin"></i>');
+        try {
+            await doGenerateSingleEntry(cat, '');
+            renderBody(); showStatus(cat + ' ' + T('entryCreated'), 'success');
+        } catch (e) { showStatus(e.message, 'error'); renderBody(); }
+        lbcBusy = false;
+    });
+
+    $(document).on('click', '.lbc-del-custom-cat', function (ev) {
+        ev.stopPropagation(); ev.stopImmediatePropagation(); ev.preventDefault();
+        var cat = $(this).data('cat');
+        lbcData.customCategories = (lbcData.customCategories || []).filter(function (c) { return c !== cat; });
+        renderBody();
     });
 
     $(document).on('click', '.lbc-entry-regen', async function (ev) {
@@ -1879,6 +1925,22 @@ function renderEntries($b) {
         h += '<button class="menu_button lbc-add-entry-cat" data-cat="' + esc(ENTRY_CATEGORIES[ai]) +
             '" style="font-size:10px!important;padding:3px 8px!important;border-radius:6px!important">' + esc(ENTRY_CATEGORIES[ai]) + '</button>';
     }
+    // Remembered custom categories: one pill each, with a subtle inline × to forget it.
+    var cc = lbcData.customCategories || [];
+    for (var ci2 = 0; ci2 < cc.length; ci2++) {
+        h += '<button class="menu_button lbc-add-entry-cat lbc-custom-cat" data-cat="' + esc(cc[ci2]) +
+            '" style="font-size:10px!important;padding:3px 6px 3px 8px!important;border-radius:6px!important;' +
+            'color:rgba(180,130,255,.95)!important;border-color:rgba(180,130,255,.35)!important;' +
+            'display:inline-flex;align-items:center;gap:5px">' +
+            '<span>' + esc(cc[ci2]) + '</span>' +
+            '<span class="lbc-del-custom-cat" data-cat="' + esc(cc[ci2]) + '" title="Remove this custom category" ' +
+            'style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;' +
+            'border-radius:50%;font-size:9px;line-height:1;opacity:.5;' +
+            'background:rgba(180,130,255,.18)">×</span>' +
+            '</button>';
+    }
+    h += '<button class="menu_button lbc-add-entry-custom" title="' + esc(T('customCatPrompt')) +
+        '" style="font-size:10px!important;padding:3px 8px!important;border-radius:6px!important;border-style:dashed!important;opacity:.85">' + esc(T('customCat')) + '</button>';
     h += '</div>';
     $b.html(h);
 }
