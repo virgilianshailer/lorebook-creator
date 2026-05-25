@@ -1,5 +1,5 @@
 /*
- *  LoreBook Creator v1.3.2 — SillyTavern Extension
+ *  LoreBook Creator v1.3.1 — SillyTavern Extension
  *  Create World Info / LoreBook entries via LLM with simple & advanced modes.
  *  Full translation support via Chat Translation extension.
  *  Template loading, era/type/scale parameters, per-field LLM generation,
@@ -90,6 +90,10 @@ var UI = {
     template: 'Template',
     exportJSON: 'Export JSON',
     importST: 'Import to ST',
+    loadBook: 'Load LoreBook',
+    bookImported: 'LoreBook imported',
+    bookImportReplace: 'Replace current entries with the imported LoreBook?\n\nOK = replace all\nCancel = add imported entries to the current ones',
+    noEntriesInFile: 'No entries found in this file.',
     describeWorld: 'Describe Your World',
     ideaPlaceholder: 'Describe your world/setting idea in a few sentences or paragraphs...',
     templateLoaded: 'Template loaded',
@@ -615,6 +619,47 @@ function loadTemplateFromJSON(jsonData) {
     return { count: count, categories: categories, samples: sampleEntries };
 }
 
+/* Import an existing SillyTavern World Info / LoreBook for EDITING.
+   Unlike loadTemplateFromJSON (which only keeps it as a style sample), this
+   parses the file into real, editable lbcData.entries. The ST World Info
+   format stores entries as an object keyed by uid: { entries: { "0": {...} } }.
+   Returns the array of normalized entries (does not mutate lbcData itself). */
+function parseLorebookEntries(jsonData) {
+    var src = (jsonData && jsonData.entries) ? jsonData.entries : null;
+    if (!src) return [];
+    var rawList = Array.isArray(src) ? src : Object.keys(src).map(function (k) { return src[k]; });
+    var out = [];
+    for (var i = 0; i < rawList.length; i++) {
+        var e = rawList[i];
+        if (!e || (typeof e !== 'object')) continue;
+
+        // Derive category: explicit field first, otherwise from "Name — Category"
+        // suffix in the comment (the convention this tool exports with).
+        var cat = e.category || '';
+        if (!cat) {
+            var comment = e.comment || '';
+            var m = comment.match(/—\s*(.+)$/);
+            if (m) cat = m[1].trim();
+        }
+
+        var entry = normalizeEntry({
+            comment: e.comment || e.addMemo || 'Untitled Entry',
+            key: e.key,
+            keysecondary: e.keysecondary,
+            content: e.content || '',
+            category: cat || 'Supplementary',
+            constant: e.constant,
+            selective: e.selective,
+            order: (e.order !== undefined ? e.order : e.insertion_order),
+            position: e.position,
+            depth: e.depth,
+            probability: e.probability
+        });
+        out.push(entry);
+    }
+    return out;
+}
+
 function getTemplateBlock() {
     if (!lbcData.templateData) return '';
     var entries = lbcData.templateData.entries || {};
@@ -1051,7 +1096,7 @@ function normalizeEntry(raw) {
         position: parseInt(raw.position) || 0,
         depth: parseInt(raw.depth) || 4,
         disable: false,
-        probability: 100
+        probability: (raw.probability !== undefined && raw.probability !== null) ? (parseInt(raw.probability) || 100) : 100
     };
 }
 
@@ -1162,6 +1207,7 @@ function buildPanel() {
     h += '<button class="menu_button lbc-btn-primary" id="lbc-f-generate"><i class="fa-solid fa-wand-magic-sparkles"></i> ' + esc(T('generate')) + '</button>';
     h += '<button class="menu_button" id="lbc-f-expand" style="display:none"><i class="fa-solid fa-layer-group"></i> ' + esc(T('expand')) + '</button>';
     h += '<div class="lbc-footer-spacer"></div>';
+    h += '<button class="menu_button" id="lbc-f-loadbook"><i class="fa-solid fa-folder-open"></i> ' + esc(T('loadBook')) + '</button>';
     h += '<button class="menu_button" id="lbc-f-template"><i class="fa-solid fa-upload"></i> ' + esc(T('template')) + '</button>';
     h += '<button class="menu_button lbc-btn-warning" id="lbc-f-export"><i class="fa-solid fa-download"></i> ' + esc(T('exportJSON')) + '</button>';
     h += '<button class="menu_button lbc-btn-success" id="lbc-f-import"><i class="fa-solid fa-file-import"></i> ' + esc(T('importST')) + '</button>';
@@ -1170,6 +1216,8 @@ function buildPanel() {
     document.body.insertAdjacentHTML('beforeend', h);
     if (!document.getElementById('lbc-file-template'))
         document.body.insertAdjacentHTML('beforeend', '<input type="file" id="lbc-file-template" accept=".json" style="display:none">');
+    if (!document.getElementById('lbc-file-loadbook'))
+        document.body.insertAdjacentHTML('beforeend', '<input type="file" id="lbc-file-loadbook" accept=".json" style="display:none">');
 
     applyPanelPosition();
     bindPanelEvents();
@@ -1208,6 +1256,7 @@ function bindPanelEvents() {
     $(document).on('click', '#lbc-f-export', doUIExport);
     $(document).on('click', '#lbc-f-import', doUIImport);
     $(document).on('click', '#lbc-f-template', function () { $('#lbc-file-template').trigger('click'); });
+    $(document).on('click', '#lbc-f-loadbook', function () { $('#lbc-file-loadbook').trigger('click'); });
     $(document).on('click', '#lbc-h-reset', function () {
         if (!confirm(T('resetConfirm'))) return;
         resetData(); renderBody(); showStatus(T('resetDone'), 'info');
@@ -1228,6 +1277,41 @@ function bindPanelEvents() {
         reader.readAsText(file); this.value = '';
     });
 
+    $(document).on('change', '#lbc-file-loadbook', function () {
+        var file = this.files[0]; if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+            try {
+                var json = JSON.parse(ev.target.result);
+                var imported = parseLorebookEntries(json);
+                if (!imported.length) { showStatus(T('noEntriesInFile'), 'error'); return; }
+
+                // If the user already has entries, ask whether to replace or merge.
+                if (lbcData.entries && lbcData.entries.length) {
+                    if (confirm(T('bookImportReplace'))) lbcData.entries = imported;
+                    else lbcData.entries = lbcData.entries.concat(imported);
+                } else {
+                    lbcData.entries = imported;
+                }
+
+                // Carry over the lorebook name if present.
+                if (json._name || json.name) lbcData.worldName = json._name || json.name;
+
+                // Jump to the entries view so the user sees what was loaded.
+                lbcData.mode = 'advanced';
+                lbcData.activeTab = 'entries';
+                $('.lbc-mode-btn').removeClass('active');
+                $('.lbc-mode-btn[data-mode="advanced"]').addClass('active');
+                $('#lbc-tabs').show();
+                $('.lbc-tab').removeClass('active');
+                $('.lbc-tab[data-tab="entries"]').addClass('active');
+                updateFooterButtons();
+                renderBody();
+                showStatus(T('bookImported') + ': ' + imported.length + ' ' + T('entriesWord'), 'success');
+            } catch (e) { showStatus(e.message, 'error'); }
+        };
+        reader.readAsText(file); this.value = '';
+    });
     $(document).on('click', '.lbc-gen-field-btn', async function () {
         if (lbcBusy) return;
         var key = $(this).data('field'), label = $(this).data('label');
