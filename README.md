@@ -14,7 +14,7 @@ It's the worldbuilding companion to **[Character Creator](https://github.com/vir
 - **Guided worldbuilding parameters** — pick a **world type** (Realistic, Fantasy, Sci-Fi, Horror, Post-Apocalyptic, Urban Fantasy, Steampunk, Mythological, or Custom), an **era** (Prehistoric → Far Future, plus Timeless and Custom), and a **scale** that controls how many entries are generated (Micro 5–10 → Epic 55–80+)
 - **Your place in the world** — set the **user role** (Observer, Participant, Key Player, Ruler, Godlike) so the lore is framed around how you'll actually role-play in it
 - **Rich world fields** — tone, themes, main conflict, geography, factions, magic system, tech level, history and core rules, each individually generatable
-- **14 entry categories** — Core Rule, Core Concept, Character, Faction, Location, Item / Artifact, Event / History, Magic / Technology, Creature / Species, Culture / Custom, Organization, Lore / Legend, RP Prompt, Supplementary
+- **14 entry categories** — Core Rule, Core Concept, Character, Faction, Location, Item / Artifact, Event / History, Magic / Technology, Creature / Species, Culture / Custom, Organization, Lore / Legend, RP Prompt, Supplementary — plus **custom categories** you define yourself, which become reusable one-click buttons
 - **Per-field LLM tools** — 🎲 **Generate**, ➕ **Add More / Extend** (append new entities to an existing field), and ✨ **Enhance & Expand** (rewrite a field or entry in more depth)
 - **Per-entry control** — regenerate, edit, or expand any single entry; filter the entry list by category
 - **🔒 Field & section locking** — lock any field or entry and the LLM treats it as fixed context it must build around, so regenerating the rest never overwrites your choices
@@ -157,6 +157,7 @@ With the **Chat Translation** extension installed, the translation toggle does t
 **1.4.0**
 - Added **Load LoreBook** — import an existing SillyTavern World Info JSON back into the editor to continue or refine it, with a choice to replace or merge into your current entries.
 - Added **Reconstruct Fields** — on the Entries tab, analyze the current/imported entries and auto-fill the Overview / World / Lore fields. Pairs with Load LoreBook so imported books get a full high-level description. Locked fields are never overwritten.
+- Added **custom categories** — define your own entry category by name; it becomes a reusable one-click button (with a small × to remove it) so you can keep adding entries of that category without retyping. Custom categories found in imported LoreBooks are surfaced as buttons too.
 - Fixed **Expand (+5)** in Simple mode generating entries without trigger keywords; the expansion prompt now requests the full entry structure, matching the main generator.
 
 ---
