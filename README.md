@@ -21,6 +21,7 @@ It's the worldbuilding companion to **[Character Creator](https://github.com/vir
 - **Proper World Info output** — entries are exported with primary/secondary **trigger keywords**, **position**, **order**, **constant**, **probability** and **depth**; Core Rules are pinned with recursion prevention so they stay authoritative
 - **One-click import** — sends the LoreBook straight to SillyTavern via the World Info API, with an automatic JSON download as a fallback
 - **📂 Load & edit existing LoreBooks** — import any SillyTavern World Info JSON back into the editor to continue, expand, or refine it; choose to replace your current work or merge the imported entries into it
+- **🪄 Reconstruct fields from entries** — analyze the current entries and auto-fill the Overview / World / Lore fields (world name, type, era, tone, factions, history, core rules, …); great after importing a LoreBook that has no high-level description. Locked fields are preserved.
 - **📄 Template loading** — paste a template to steer the structure, tone and conventions of the generated world
 - **🌍 Built-in translation** — translate the whole UI *and* generated content into your SillyTavern UI language via the Chat Translation extension, while keeping the original English for export
 - **Persona-safe generation** — explicitly prevents your User Persona and active character description from leaking into the worldbuilding output
@@ -155,8 +156,7 @@ With the **Chat Translation** extension installed, the translation toggle does t
 
 **1.4.0**
 - Added **Load LoreBook** — import an existing SillyTavern World Info JSON back into the editor to continue or refine it, with a choice to replace or merge into your current entries.
-
-**1.3.2**
+- Added **Reconstruct Fields** — on the Entries tab, analyze the current/imported entries and auto-fill the Overview / World / Lore fields. Pairs with Load LoreBook so imported books get a full high-level description. Locked fields are never overwritten.
 - Fixed **Expand (+5)** in Simple mode generating entries without trigger keywords; the expansion prompt now requests the full entry structure, matching the main generator.
 
 ---
