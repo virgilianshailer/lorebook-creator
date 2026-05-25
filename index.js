@@ -1599,6 +1599,28 @@ function bindPanelEvents() {
     $(document).on('click', '#lbc-editor-back', function () {
         saveEntryEditor(); lbcData.editingEntryIdx = -1; renderBody();
     });
+
+    $(document).on('change', '#lbc-ed-category', function () {
+        if ($(this).val() !== '__new__') return;
+        var name = prompt(T('customCatPrompt'), '');
+        name = (name || '').trim();
+        var idx = lbcData.editingEntryIdx;
+        if (!name) {
+            // Cancelled / empty — revert the select to the entry's current category.
+            if (idx >= 0 && lbcData.entries[idx]) $(this).val(lbcData.entries[idx].category);
+            return;
+        }
+        // Remember as a reusable button (skip built-ins and case-insensitive dupes).
+        if (!lbcData.customCategories) lbcData.customCategories = [];
+        var lc = name.toLowerCase();
+        var isBuiltin = ENTRY_CATEGORIES.some(function (c) { return c.toLowerCase() === lc; });
+        var exists = lbcData.customCategories.some(function (c) { return c.toLowerCase() === lc; });
+        if (!isBuiltin && !exists) lbcData.customCategories.push(name);
+        // Save the rest of the editor, apply the new category, re-render the editor.
+        saveEntryEditor();
+        if (idx >= 0 && lbcData.entries[idx]) lbcData.entries[idx].category = name;
+        renderBody();
+    });
 }
 
 function togglePanel(show) {
@@ -1720,7 +1742,7 @@ function saveEntryEditor() {
     v = $('#lbc-ed-keys').val(); if (v !== undefined) e.key = v.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
     v = $('#lbc-ed-keys2').val(); if (v !== undefined) e.keysecondary = v.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
     v = $('#lbc-ed-content').val(); if (v !== undefined) { e.content = v; if (e._origContent !== undefined) e._origContent = v; }
-    v = $('#lbc-ed-category').val(); if (v !== undefined) e.category = v;
+    v = $('#lbc-ed-category').val(); if (v !== undefined && v !== '__new__') e.category = v;
     v = $('#lbc-ed-order').val(); if (v !== undefined) e.order = parseInt(v) || 100;
     v = $('#lbc-ed-position').val(); if (v !== undefined) e.position = parseInt(v) || 0;
     v = $('#lbc-ed-depth').val(); if (v !== undefined) e.depth = parseInt(v) || 4;
@@ -2028,15 +2050,24 @@ function renderEntryEditor($b) {
 
     h += '<div class="lbc-field"><div class="lbc-field-label">' + esc(T('category')) + '</div>';
     h += '<select class="lbc-select" id="lbc-ed-category">';
-    
+
+    // Build the option list: built-ins + remembered custom categories + any
+    // category already used by other entries + this entry's own category.
     var catsForSelect = ENTRY_CATEGORIES.slice();
-    if (e.category && catsForSelect.indexOf(e.category) === -1) {
-        catsForSelect.push(e.category); 
+    function pushCat(c) {
+        if (!c) return;
+        var lc = String(c).toLowerCase();
+        if (!catsForSelect.some(function (x) { return x.toLowerCase() === lc; })) catsForSelect.push(c);
     }
-    
+    (lbcData.customCategories || []).forEach(pushCat);
+    lbcData.entries.forEach(function (en) { pushCat(en.category); });
+    pushCat(e.category);
+
     for (var ci = 0; ci < catsForSelect.length; ci++) {
         h += '<option value="' + esc(catsForSelect[ci]) + '"' + (e.category === catsForSelect[ci] ? ' selected' : '') + '>' + esc(catsForSelect[ci]) + '</option>';
     }
+    // Let the user create a brand-new custom category right here.
+    h += '<option value="__new__">' + esc(T('customCat')) + '…</option>';
     h += '</select></div>';
 
     h += '<div class="lbc-field"><div class="lbc-field-label">' + esc(T('primaryKeys')) + '</div>';
