@@ -404,3 +404,14 @@
     #lbc-panel { width: 100vw; }
     #lbc-panel.lbc-mode-center { width: 98vw; height: 94vh; }
 }
+/* Custom-category pill: subtle inline remove (×) that brightens on hover */
+.lbc-custom-cat .lbc-del-custom-cat {
+    transition: opacity .12s ease, background .12s ease, transform .12s ease;
+    cursor: pointer;
+}
+.lbc-custom-cat:hover .lbc-del-custom-cat { opacity: .8; }
+.lbc-custom-cat .lbc-del-custom-cat:hover {
+    opacity: 1 !important;
+    background: rgba(255, 90, 90, .35) !important;
+    transform: scale(1.12);
+}
