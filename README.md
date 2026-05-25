@@ -20,6 +20,7 @@ It's the worldbuilding companion to **[Character Creator](https://github.com/vir
 - **🔒 Field & section locking** — lock any field or entry and the LLM treats it as fixed context it must build around, so regenerating the rest never overwrites your choices
 - **Proper World Info output** — entries are exported with primary/secondary **trigger keywords**, **position**, **order**, **constant**, **probability** and **depth**; Core Rules are pinned with recursion prevention so they stay authoritative
 - **One-click import** — sends the LoreBook straight to SillyTavern via the World Info API, with an automatic JSON download as a fallback
+- **📂 Load & edit existing LoreBooks** — import any SillyTavern World Info JSON back into the editor to continue, expand, or refine it; choose to replace your current work or merge the imported entries into it
 - **📄 Template loading** — paste a template to steer the structure, tone and conventions of the generated world
 - **🌍 Built-in translation** — translate the whole UI *and* generated content into your SillyTavern UI language via the Chat Translation extension, while keeping the original English for export
 - **Persona-safe generation** — explicitly prevents your User Persona and active character description from leaking into the worldbuilding output
@@ -104,6 +105,8 @@ The **scale** setting decides roughly how many entries the model aims for, and t
 - **📋 Entries** — the full entry list with category filtering; generate, regenerate, edit, expand, extend, lock or delete individual entries.
 - **💾 Export** — import to SillyTavern or download the World Info JSON.
 
+A footer action, **📂 Load LoreBook**, is always available: pick a previously exported (or any SillyTavern) World Info JSON and it loads into the editor as fully editable entries, so you can pick up unfinished work or refine an existing book. This is different from **Template**, which only uses a file as a style reference for new generation.
+
 Every generatable field carries 🎲 (generate), ➕ (add more) and ✨ (enhance) controls, plus a 🔒 lock.
 
 ---
@@ -145,6 +148,16 @@ With the **Chat Translation** extension installed, the translation toggle does t
 **Translation isn't working**
 
 - Confirm the **Chat Translation** extension is installed and configured. Translation features are disabled without it.
+
+---
+
+## Version History
+
+**1.4.0**
+- Added **Load LoreBook** — import an existing SillyTavern World Info JSON back into the editor to continue or refine it, with a choice to replace or merge into your current entries.
+
+**1.3.2**
+- Fixed **Expand (+5)** in Simple mode generating entries without trigger keywords; the expansion prompt now requests the full entry structure, matching the main generator.
 
 ---
 
