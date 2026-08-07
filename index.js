@@ -1,5 +1,5 @@
 /*
- *  LoreBook Creator v1.7.0 — SillyTavern Extension
+ *  LoreBook Creator v1.15.0 — SillyTavern Extension
  *  Create World Info / LoreBook entries via LLM with simple & advanced modes.
  *  Full translation support via Chat Translation extension.
  *  Template loading, era/type/scale parameters, per-field LLM generation,
@@ -14,6 +14,8 @@
  *  Added v1.12: Merge Workspace — side-by-side comparison of two lorebooks,
  *       deterministic pair matching, LLM overlap analysis, selective transfer,
  *       and batched per-pair LLM merging that scales to large books.
+ *  Added: LLM Edit (plain-language edits with before/after diff review),
+ *       Build lorebook from lore, Auto-categorize, parent entries, blank entry.
  */
 
 /* ══════════════════════════════════════
