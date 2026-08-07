@@ -1,12 +1,19 @@
 /*
- *  LoreBook Creator v1.4.0 — SillyTavern Extension
+ *  LoreBook Creator v1.7.0 — SillyTavern Extension
  *  Create World Info / LoreBook entries via LLM with simple & advanced modes.
  *  Full translation support via Chat Translation extension.
  *  Template loading, era/type/scale parameters, per-field LLM generation,
  *  user role, category system, export/import, generated content translation.
  *  Added: Enhance & Expand entries and text fields.
  *  Added: Add More / Extend (➕) to append new entities to existing fields.
+ *  Added: Merge LoreBooks — intelligently combine multiple lorebooks into one via LLM.
  *  Fix: Prevent User Persona / Character description leaking into generation.
+ *  Added: LoreBook Optimizer — deterministic audit + Auto-Fix + LLM key deconfliction.
+ *  Fix: entry model now preserves group/sticky/preventRecursion/matchWholeWords/
+ *       selectiveLogic/cooldown/disable across import → edit → export.
+ *  Added v1.12: Merge Workspace — side-by-side comparison of two lorebooks,
+ *       deterministic pair matching, LLM overlap analysis, selective transfer,
+ *       and batched per-pair LLM merging that scales to large books.
  */
 
 /* ══════════════════════════════════════
@@ -95,6 +102,26 @@ var UI = {
     bookImported: 'LoreBook imported',
     bookImportReplace: 'Replace current entries with the imported LoreBook?\n\nOK = replace all\nCancel = add imported entries to the current ones',
     noEntriesInFile: 'No entries found in this file.',
+    optimize: 'Optimize',
+    optimizing: 'Analyzing...',
+    audit: 'Audit',
+    optimizeTitle: 'LoreBook Optimizer',
+    optIssues: 'Detected problems',
+    optClean: 'No mechanical problems found.',
+    optProposed: 'Proposed key changes',
+    optNoPatches: 'Nothing for the LLM to fix here — use Auto-Fix for the mechanical issues.',
+    optContradictions: 'Possible canon contradictions (review manually)',
+    optAutoFix: 'Auto-Fix (no LLM)',
+    optAutoFixed: 'Mechanical fixes applied',
+    optApply: 'Apply selected',
+    optApplied: 'Patches applied',
+    optFixLog: 'Auto-Fix changes',
+    optNothingToFix: 'Nothing to auto-fix — the mechanical side is already clean.',
+    optRunOptimize: 'Run Optimize to let the LLM resolve the remaining key collisions.',
+    optClean2: 'All clear — nothing left to fix.',
+    optAuditHint: 'Instant mechanical audit — no LLM call',
+    optOptimizeHint: 'Audit + LLM key deconfliction',
+    noEntriesToOptimize: 'No entries to optimize. Generate or load a lorebook first.',
     reconstructFields: 'Reconstruct Fields',
     reconstructConfirm: 'Analyze the current entries and fill in the Overview / World / Lore fields?\n\nThis overwrites those fields (except locked ones) based on your entries.',
     reconstructing: 'Reconstructing world fields from entries...',
@@ -132,6 +159,26 @@ var UI = {
     genAllParams: 'Generate All Parameters',
     noEntries: 'No entries yet. Generate entries using the Generate button, or add individual entries below.',
     addEntryByCat: 'Add Entry by Category',
+    blankEntry: 'Blank entry',
+    llmEdit: 'LLM Edit',
+    llmEditHint: 'Describe the edit in plain language. Only what you ask for will change, and you review every change before it lands.',
+    llmEditPlaceholder: 'e.g. "Rename the cult to Ashen Choir everywhere" or "Add that the ritual only works on a new moon"',
+    llmEditRun: 'Run Edit',
+    llmEditApply: 'Apply',
+    llmEditBack: 'Back',
+    llmEditBefore: 'Before',
+    llmEditAfter: 'After',
+    llmEditNoChanges: 'The LLM found nothing to change for this instruction.',
+    llmEditInstrEmpty: 'Enter an edit instruction first.',
+    llmEditDone: 'change(s) applied.',
+    llmEditPreviewHint: 'Review the proposed changes. Uncheck any you want to skip, then Apply.',
+    blankEntryHint: 'Add an empty entry and fill it by hand — no generation',
+    parentEntries: 'Parent Entries',
+    parentEntriesHint: 'Pick existing entries as source material — the new content will be generated FROM them, staying consistent and interlinked',
+    genFromParents: 'Generate from parents',
+    addParent: '+ add parent…',
+    noOtherEntries: 'no other entries to pick from',
+    parentsGenerated: 'Generated from parents — review and save',
     customCat: '+ Custom',
     customCatPrompt: 'Enter a custom category name (e.g. "Trading Psychology", "Deity", "Bloodline"):',
     editEntry: 'Edit Entry',
@@ -181,12 +228,69 @@ var UI = {
     translateOff: 'Translation removed.',
     translateNA: 'Translation not available.',
     transContent: 'Translating content...',
+    translateIdea: 'To English',
+    translateIdeaHint: 'Translate your idea into English so the LLM understands the request and writes all fields in English (recommended over creating a lorebook directly in another language).',
+    translatingIdea: 'Translating idea to English...',
+    ideaTranslated: 'Idea translated to English!',
     entryEnhanced: 'Entry enhanced and expanded!',
     enhanceEntry: 'Enhance & Expand',
     fieldEnhanced: 'Field enhanced and expanded!',
     enhanceField: 'Enhance & Expand field',
     addMoreField: 'Add More / Extend',
-    fieldAddedMore: 'New data added to field!'
+    fieldAddedMore: 'New data added to field!',
+    merge: 'Merge',
+    mergeNeedTwo: 'Please select at least 2 LoreBook files to merge.',
+    flTitle: 'Lorebook from lore',
+    flSources: 'Source entries (click to exclude)',
+    flMode: 'What to build',
+    flModeDeep: 'Deep-dive — unpack these entries into a full book',
+    flModeSpin: 'Spin-off — a new corner of the same universe',
+    flModeClean: 'Restructure — rebuild only this material, invent nothing',
+    flCount: 'Target entries',
+    flName: 'New lorebook name (optional — LLM will propose one)',
+    flFocus: 'Focus / directive (optional)',
+    flGenerate: 'Build lorebook',
+    flBuilding: 'Building...',
+    flNoSources: 'All source entries are excluded — nothing to build from.',
+    flReplaceConfirm: 'The editor already holds entries. Replace them with the generated lorebook?',
+    flDone: 'Lorebook built from lore',
+    flFailed: 'Failed to parse LLM response.',
+    mergeNoEntries: 'None of the selected files contained any entries.',
+    mergeWithCurrentConfirm: 'You already have entries loaded.\n\nOK = merge ONLY the selected files (your current entries are discarded)\nCancel = include your CURRENT entries in the merge as well',
+    mergeParsing: 'Reading selected lorebooks...',
+    merging: 'Merging lorebooks with the LLM...',
+    mergeSuccess: 'merged entries created!',
+    mergeFailed: 'Failed to merge lorebooks.',
+    mgTitle: 'Merge Lorebooks',
+    mgLoadFile: 'Load file',
+    mgUseCurrent: 'Use current entries',
+    mgPickBoth: 'Load two lorebooks — a file or the current editor entries — to compare them side by side.',
+    mgPairsTitle: 'Matched pairs',
+    mgOnlyIn: 'Only in',
+    mgNoPairs: 'No overlapping entries detected mechanically. Run LLM Analysis to catch semantic duplicates (same entity under different names).',
+    mgAnalyze: 'LLM Analysis',
+    mgAnalyzing: 'Analyzing overlap with the LLM...',
+    mgAnalyzeDone: 'LLM analysis complete',
+    mgNotes: 'LLM notes',
+    mgChoiceMerge: 'Merge',
+    mgChoiceBoth: 'Both',
+    mgRun: 'Merge',
+    mgFullLLM: 'Full LLM merge',
+    mgFullLLMHint: 'Send both books whole to the LLM in ONE request — only reliable for small lorebooks',
+    mgFullConfirm: 'Full LLM merge sends BOTH books whole in a single request (may fail on large books) and replaces the editor contents. Continue?',
+    mgMergingPair: 'Merging pairs',
+    mgDone: 'Merge complete',
+    mgFailedPairs: 'pair(s) could not be merged by the LLM and were kept as two entries',
+    mgNothing: 'Nothing to merge — everything is excluded.',
+    mgReplaceConfirm: 'Replace the current editor entries with the merge result?',
+    mgExcludedHint: 'click an entry to exclude / include it',
+    mgResult: 'Result',
+    autoCategorize: 'Auto-categorize',
+    autoCategorizeConfirm: 'Let the LLM review every entry and assign the best category to each one?\n\nThis cleans up inconsistent / duplicate categories. Entries are not rewritten — only their category changes.',
+    autoCategorizing: 'Auto-categorizing entries with the LLM...',
+    autoCategorizeDone: 'entries re-categorized!',
+    autoCategorizeNoChange: 'Categories already look consistent — nothing changed.',
+    noEntriesToCategorize: 'No entries to categorize. Generate or import some first.'
 };
 
 function T(key) {
@@ -245,6 +349,44 @@ var ENTRY_CATEGORIES = [
     'Item / Artifact', 'Event / History', 'Magic / Technology', 'Creature / Species',
     'Culture / Custom', 'Organization', 'Lore / Legend', 'RP Prompt', 'Supplementary'
 ];
+
+/* Common variants / plurals / translations the LLM tends to emit, mapped to the
+   canonical category above. Keys are compared case-insensitively after trimming.
+   This is what prevents near-duplicate chips like "Characters" vs "Character". */
+var CATEGORY_SYNONYMS = {
+    'core rules': 'Core Rule', 'rule': 'Core Rule', 'rules': 'Core Rule',
+    'core concepts': 'Core Concept', 'concept': 'Core Concept', 'concepts': 'Core Concept',
+    'characters': 'Character', 'char': 'Character', 'person': 'Character', 'people': 'Character', 'npc': 'Character',
+    'factions': 'Faction', 'group': 'Faction', 'groups': 'Faction',
+    'locations': 'Location', 'place': 'Location', 'places': 'Location', 'region': 'Location', 'regions': 'Location',
+    'item': 'Item / Artifact', 'items': 'Item / Artifact', 'artifact': 'Item / Artifact', 'artifacts': 'Item / Artifact', 'object': 'Item / Artifact',
+    'event': 'Event / History', 'events': 'Event / History', 'history': 'Event / History', 'historical': 'Event / History',
+    'magic': 'Magic / Technology', 'technology': 'Magic / Technology', 'tech': 'Magic / Technology', 'magic/tech': 'Magic / Technology', 'magic / tech': 'Magic / Technology', 'power': 'Magic / Technology', 'powers': 'Magic / Technology',
+    'creature': 'Creature / Species', 'creatures': 'Creature / Species', 'species': 'Creature / Species', 'monster': 'Creature / Species', 'monsters': 'Creature / Species', 'race': 'Creature / Species', 'races': 'Creature / Species',
+    'culture': 'Culture / Custom', 'cultures': 'Culture / Custom', 'custom': 'Culture / Custom', 'customs': 'Culture / Custom', 'tradition': 'Culture / Custom', 'traditions': 'Culture / Custom',
+    'organizations': 'Organization', 'org': 'Organization', 'orgs': 'Organization', 'institution': 'Organization',
+    'lore': 'Lore / Legend', 'legend': 'Lore / Legend', 'legends': 'Lore / Legend', 'myth': 'Lore / Legend', 'myths': 'Lore / Legend', 'mythology': 'Lore / Legend',
+    'rp prompts': 'RP Prompt', 'prompt': 'RP Prompt', 'prompts': 'RP Prompt', 'roleplay prompt': 'RP Prompt',
+    'misc': 'Supplementary', 'miscellaneous': 'Supplementary', 'other': 'Supplementary', 'supplement': 'Supplementary', 'supplementary info': 'Supplementary', 'unknown': 'Supplementary'
+};
+
+/* Map a raw category string to a canonical built-in when we are confident.
+   - exact (case-insensitive) match to a built-in  -> the built-in's exact casing
+   - known synonym / plural / variant              -> the mapped built-in
+   - anything else (a genuine custom category)      -> returned unchanged (trimmed)
+   This is deliberately conservative: real custom categories like "Deity" or
+   "Bloodline" are preserved, only obvious near-duplicates get collapsed. */
+function canonicalizeCategory(cat) {
+    if (cat === undefined || cat === null) return 'Supplementary';
+    var raw = String(cat).trim();
+    if (!raw) return 'Supplementary';
+    var lc = raw.toLowerCase();
+    for (var i = 0; i < ENTRY_CATEGORIES.length; i++) {
+        if (ENTRY_CATEGORIES[i].toLowerCase() === lc) return ENTRY_CATEGORIES[i];
+    }
+    if (CATEGORY_SYNONYMS.hasOwnProperty(lc)) return CATEGORY_SYNONYMS[lc];
+    return raw;
+}
 
 /* ══════════════════════════════════════
    PROMPTS
@@ -353,6 +495,22 @@ var PROMPTS = {
         '"content":"...","category":"{{ENTRY_TYPE}}","constant":false,"order":{{ORDER_HINT}},"position":{{POSITION_HINT}}}\n' +
         'Same language as world. ONLY JSON!]',
 
+    generateFromParents:
+        '[OOC: Generate ONE lorebook entry GROUNDED IN the parent entries below. ' +
+        'The parents are the source material: the new entry must be consistent with them, reference or connect to them where natural, and expand the SAME corner of the world — not an unrelated topic.\n\n' +
+        'WORLD:\n{{WORLD_PARAMS}}\n\n' +
+        'PARENT ENTRIES (canon — never contradict):\n{{PARENTS_BLOCK}}\n\n' +
+        'DRAFT OF THE NEW ENTRY (what the user already decided — keep it; empty fields are yours to invent):\n{{DRAFT_BLOCK}}\n\n' +
+        '{{EXISTING_ENTRIES_BLOCK}}' +
+        'RULES:\n' +
+        '- The entry must make sense alongside its parents: shared names, causal links, the same factions/places/eras where appropriate.\n' +
+        '- It must still be SELF-CONTAINED (it can be injected without the parents present).\n' +
+        '- Do not retell a parent — add something new that grows out of it.\n' +
+        '- "key": 3-6 trigger words likely to appear in chat.\n\n' +
+        'JSON:\n{"comment":"Title — Category","key":["kw1","kw2"],"keysecondary":[],' +
+        '"content":"...","category":"...","constant":false,"order":100,"position":0}\n' +
+        'Same language as the parents. ONLY JSON!]',
+
     regenerateEntry:
         '[OOC: Rewrite this entry with MORE detail.\n\nWORLD:\n{{WORLD_PARAMS}}\n\n' +
         'CURRENT:\n{{CURRENT_ENTRY}}\n\nKeep topic, improve quality. Same format.\n' +
@@ -399,9 +557,36 @@ var PROMPTS = {
         'Write in the SAME LANGUAGE as the entries. Leave a field as an empty string only if the entries truly say nothing about it.\n' +
         'Respond ONLY with valid JSON. ONLY JSON!]',
 
+    autoCategorize:
+        '[OOC: You are a LoreBook / World Info librarian. Below is a numbered list of entries, each with its current category, ' +
+        'its title and a snippet of its content. Many categories are inconsistent, duplicated, mislabeled, or in the wrong language. ' +
+        'Your job is to assign the SINGLE best category to EACH entry.\n' +
+        'CRITICAL: IGNORE any user persona or chat characters. Judge ONLY by the entry title and content shown.\n\n' +
+        'ALLOWED CATEGORIES (use these EXACT English strings, choose the best fit):\n' +
+        '- ' + ENTRY_CATEGORIES.join('\n- ') + '\n\n' +
+        'GUIDELINES:\n' +
+        '- "Core Rule": fundamental laws/mechanics that govern the world.\n' +
+        '- "Core Concept": central setting-defining ideas or systems.\n' +
+        '- "Character": a specific named person/being.\n' +
+        '- "Faction" / "Organization": groups; use Faction for political/military powers, Organization for institutions/guilds/companies.\n' +
+        '- "Location": a place, region, building, realm.\n' +
+        '- "Item / Artifact": objects, weapons, relics.\n' +
+        '- "Event / History": events, eras, historical background.\n' +
+        '- "Magic / Technology": how powers or tech work.\n' +
+        '- "Creature / Species": non-character beings, races, monsters.\n' +
+        '- "Culture / Custom": traditions, customs, social practices.\n' +
+        '- "Lore / Legend": myths, legends, stories, prophecies.\n' +
+        '- "RP Prompt": instructions / scene-setting prompts for roleplay.\n' +
+        '- "Supplementary": anything that fits none of the above.\n\n' +
+        'ENTRIES:\n{{ENTRIES_LIST}}\n\n' +
+        'For EVERY entry index above, return its chosen category. Keep the index exactly as given.\n' +
+        'Respond ONLY with valid JSON in this exact shape:\n' +
+        '{"assignments":[{"index":0,"category":"Character"},{"index":1,"category":"Location"}]}\nONLY JSON!]',
+
     enhanceEntry:
         '[OOC: You are a creative world-building assistant. Your task is to deeply ENHANCE and EXPAND the following LoreBook entry.\n\n' +
-        'WORLD CONTEXT:\n{{WORLD_PARAMS}}\n\n' +
+        'WORLD CONTEXT:\n{{WORLD_PARAMS}}\n' +
+        '{{PARENTS_BLOCK}}\n' +
         'CURRENT ENTRY:\n{{CURRENT_ENTRY}}\n\n' +
         'TASK:\n' +
         '1. Significantly expand the "content" field. Make it much longer, deeply detailed, artistic, and rich in world-building lore. Add history, sensory details, and depth based on the context.\n' +
@@ -424,7 +609,94 @@ var PROMPTS = {
         '- "category": EXACTLY "{{TARGET_CATEGORY}}".\n\n' +
         'Respond ONLY with valid JSON in this format:\n' +
         '{"entries":[{"comment":"Actual Name of Entity","key":["keyword1","keyword2","keyword3"],"keysecondary":[],"content":"...","category":"{{TARGET_CATEGORY}}","constant":false,"order":100,"position":0}]}\n' +
-        'ONLY JSON!]'
+        'ONLY JSON!]',
+
+    lorebookFromLore:
+        '[OOC: You are an expert LoreBook / World Info author. You are given SOURCE ENTRIES taken from the lorebook "{{SOURCE_WORLD}}". They are canon.\n' +
+        'CRITICAL: IGNORE any existing user persona, user descriptions, or chat characters. Work ONLY from the source entries and the task below.\n\n' +
+        'SOURCE ENTRIES (canon — never contradict):\n{{SOURCE_ENTRIES}}\n\n' +
+        'TASK: {{MODE_TASK}}\n' +
+        '{{FOCUS_BLOCK}}' +
+        'Generate approximately {{TARGET_COUNT}} entries. The result must be a SELF-CONTAINED lorebook: fully usable on its own, without the source book present. Restate whatever source facts the new entries depend on instead of referring to them.\n\n' +
+        'Each output entry MUST have these exact JSON keys:\n' +
+        '- "comment": string (the entity/concept name, optionally "Name — Category")\n' +
+        '- "key": array of 3-6 trigger keywords (REQUIRED, never empty)\n' +
+        '- "keysecondary": array of 0-3 secondary keywords\n' +
+        '- "content": string (detailed lore text, use [ ] for structured data)\n' +
+        '- "category": one of: ' + ENTRY_CATEGORIES.join(', ') + '\n' +
+        '- "constant": boolean (false for almost all)\n' +
+        '- "order": number (50-950, higher = more important)\n' +
+        '- "position": number (0 for lore, 1 for RP prompts, 4 for constant rules)\n\n' +
+        'Also propose an overall "worldName" and short "worldDescription" for the new lorebook.\n' +
+        'Write in the SAME LANGUAGE as the source entries.\n' +
+        'Respond ONLY with valid JSON:\n' +
+        '{"worldName":"...","worldDescription":"...","entries":[{"comment":"Name","key":["kw1","kw2","kw3"],"keysecondary":[],"content":"...","category":"...","constant":false,"order":100,"position":0}]}\n' +
+        'ONLY JSON!]',
+
+    mergeLorebooks:
+        '[OOC: You are an expert LoreBook / World Info editor. You are given {{BOOK_COUNT}} separate lorebooks that cover related topics. ' +
+        'Your job is to INTELLIGENTLY MERGE them into a SINGLE, coherent, harmonized lorebook.\n' +
+        'CRITICAL: IGNORE any existing user persona, user descriptions, or chat characters. Work ONLY from the lorebooks below.\n\n' +
+        'SOURCE LOREBOOKS:\n{{SOURCE_BOOKS}}\n\n' +
+        'MERGING RULES:\n' +
+        '1. DEDUPLICATE: If two entries describe the same entity/concept/place/faction, combine them into ONE richer entry. Keep all unique facts from both, drop pure repetition.\n' +
+        '2. RESOLVE CONFLICTS: If sources contradict each other, reconcile them into the most coherent single version (prefer the more detailed/specific one, or harmonize both).\n' +
+        '3. HARMONIZE: Unify naming, tone, terminology and style so the result reads as one consistent world, not stitched fragments.\n' +
+        '4. PRESERVE: Do NOT lose unique entries that appear in only one book — carry them over.\n' +
+        '5. ENRICH: Where merging two entries, improve and slightly expand the combined content so the union is more useful than either original.\n' +
+        '6. MERGE KEYWORDS: For combined entries, merge the trigger keywords (union, de-duplicated).\n' +
+        '7. Keep a sensible total — combine aggressively where it makes sense, but never collapse distinct entities together.\n\n' +
+        'Each output entry MUST have these exact JSON keys:\n' +
+        '- "comment": string (the entity/concept name, optionally "Name — Category")\n' +
+        '- "key": array of 3-6 trigger keywords (REQUIRED, never empty)\n' +
+        '- "keysecondary": array of 0-3 secondary keywords\n' +
+        '- "content": string (detailed merged lore text, use [ ] for structured data)\n' +
+        '- "category": one of: ' + ENTRY_CATEGORIES.join(', ') + '\n' +
+        '- "constant": boolean (false for almost all)\n' +
+        '- "order": number (50-950, higher = more important)\n' +
+        '- "position": number (0 for lore, 1 for RP prompts, 4 for constant rules)\n\n' +
+        'Also propose an overall "worldName" and short "worldDescription" for the merged result.\n' +
+        'Write in the SAME LANGUAGE as the source lorebooks.\n' +
+        'Respond ONLY with valid JSON:\n' +
+        '{"worldName":"...","worldDescription":"...","entries":[{"comment":"Name","key":["kw1","kw2","kw3"],"keysecondary":[],"content":"...","category":"...","constant":false,"order":100,"position":0}]}\n' +
+        'ONLY JSON!]',
+
+    mergeAnalyze:
+        '[OOC: You are a LoreBook / World Info analyst. Two lorebooks, A and B, are about to be merged. ' +
+        'Below are compact digests of both (index | category | title | keys | opening text).\n' +
+        'CRITICAL: IGNORE any user persona or chat characters. Work ONLY on the data below.\n\n' +
+        'LOREBOOK A: "{{NAME_A}}"\n{{DIGEST_A}}\n\n' +
+        'LOREBOOK B: "{{NAME_B}}"\n{{DIGEST_B}}\n\n' +
+        'PAIRS ALREADY MATCHED MECHANICALLY (by key/title overlap):\n{{KNOWN_PAIRS}}\n\n' +
+        'TASK:\n' +
+        '1. Find SEMANTIC duplicate pairs the mechanical matching missed: entries in A and B that describe the SAME entity, place, faction or concept under different names, spellings or languages.\n' +
+        '2. For every pair (including the known ones), classify the relation:\n' +
+        '   - "duplicate": same entity, the two versions largely agree — safe to merge into one entry\n' +
+        '   - "conflict": same entity but the books CONTRADICT each other on facts — needs a careful merge\n' +
+        '   - "related": connected but genuinely DISTINCT entities — both should be kept separately\n' +
+        '3. Give a ONE-LINE reason per pair naming the concrete overlap or contradiction.\n' +
+        '4. Add up to 5 short overall NOTES about merging these two books (tone mismatch, naming conventions, category overlap, etc.).\n\n' +
+        'Indices refer to the digests above.\n' +
+        '{{LANG_LINE}}' +
+        'Respond ONLY with valid JSON:\n' +
+        '{"pairs":[{"a":0,"b":3,"relation":"duplicate","reason":"..."}],"notes":["..."]}\n' +
+        'ONLY JSON!]',
+
+    mergePair:
+        '[OOC: You are an expert LoreBook / World Info editor. Below are {{PAIR_COUNT}} PAIRS of entries. ' +
+        'In each pair, VERSION A and VERSION B describe the same entity/concept but come from two different lorebooks being merged.\n' +
+        'CRITICAL: IGNORE any user persona or chat characters. Work ONLY on the entries below.\n\n' +
+        '{{PAIRS_BLOCK}}\n\n' +
+        'For EACH pair produce ONE merged entry:\n' +
+        '- Keep ALL unique facts from both versions; drop pure repetition.\n' +
+        '- If the versions contradict each other, reconcile them into the most coherent single version (prefer the more detailed/specific fact).\n' +
+        '- Merge the trigger keywords: union, de-duplicated, max 8 primary keys.\n' +
+        '- The merged "content" must read as ONE coherent text, not two glued halves.\n' +
+        '- Never drop a named character, place or rule that appears in either version.\n' +
+        '{{LANG_LINE}}' +
+        'Respond ONLY with valid JSON, one object per pair, using the pair numbers above:\n' +
+        '{"merged":[{"pair":0,"comment":"...","key":["kw1","kw2"],"keysecondary":[],"content":"...","category":"..."}]}\n' +
+        'Include EVERY pair. ONLY JSON!]'
 };
 
 /* ══════════════════════════════════════
@@ -451,6 +723,7 @@ async function initLBC() {
         buildPanel();
         buildSettingsPanel();
         buildChatButton();
+        exposeLBCApi();
         L('Ready! quiet:', !!genQuiet, 'translate:', !!translateFn);
     } catch (e) { E('Init:', e); }
 }
@@ -683,7 +956,19 @@ function parseLorebookEntries(jsonData) {
             order: (e.order !== undefined ? e.order : e.insertion_order),
             position: e.position,
             depth: e.depth,
-            probability: e.probability
+            probability: e.probability,
+
+            /* Targeting fields — read them back so a round-trip is lossless. */
+            disable: e.disable,
+            selectiveLogic: e.selectiveLogic,
+            group: e.group,
+            groupWeight: e.groupWeight,
+            useGroupScoring: e.useGroupScoring,
+            preventRecursion: e.preventRecursion,
+            excludeRecursion: e.excludeRecursion,
+            matchWholeWords: e.matchWholeWords,
+            sticky: e.sticky,
+            cooldown: e.cooldown
         });
         out.push(entry);
     }
@@ -921,6 +1206,65 @@ async function doReconstructWorld() {
     return { applied: applied };
 }
 
+/* Ask the LLM to assign the best category to every existing entry, then map each
+   answer onto a canonical built-in (or a kept custom category). Only the category
+   field changes — titles, keys and content are left untouched. */
+async function doAutoCategorize() {
+    if (!genQuiet) throw new Error(T('noLLM'));
+    if (!lbcData.entries.length) throw new Error(T('noEntriesToCategorize'));
+
+    // Build a compact, indexed list. Use the original (untranslated) text where
+    // available so the model sees the real content.
+    var list = lbcData.entries.map(function (e, i) {
+        var title = e._origComment || e.comment || 'Untitled';
+        var content = (e._origContent || e.content || '').replace(/\s+/g, ' ').trim().substring(0, 220);
+        var keys = (e.key || []).slice(0, 6).join(', ');
+        return i + '. [current: ' + (e.category || 'Unknown') + '] "' + title + '"' +
+            (keys ? ' (keys: ' + keys + ')' : '') +
+            ' — ' + content;
+    }).join('\n');
+
+    var prompt = PROMPTS.autoCategorize.replace('{{ENTRIES_LIST}}', list);
+
+    var raw = await lbcGenQuiet(prompt);
+    var data = parseJSON(raw);
+    if (!data) throw new Error('Failed to parse categorization.');
+
+    // Accept either {"assignments":[...]} or a bare array.
+    var assignments = Array.isArray(data) ? data
+        : (Array.isArray(data.assignments) ? data.assignments : null);
+    if (!assignments) throw new Error('Failed to parse categorization.');
+
+    // Remembered custom categories are valid targets too (compared case-insensitively).
+    if (!lbcData.customCategories) lbcData.customCategories = [];
+    var customLc = lbcData.customCategories.map(function (c) { return c.toLowerCase(); });
+
+    var changed = 0;
+    for (var a = 0; a < assignments.length; a++) {
+        var item = assignments[a];
+        if (!item || typeof item !== 'object') continue;
+        var idx = parseInt(item.index);
+        if (isNaN(idx) || idx < 0 || idx >= lbcData.entries.length) continue;
+        if (item.category === undefined || item.category === null) continue;
+
+        var proposed = String(item.category).trim();
+        if (!proposed) continue;
+
+        // Prefer a canonical built-in; otherwise honor a known custom category;
+        // otherwise fall back to the canonicalizer's best guess.
+        var finalCat = canonicalizeCategory(proposed);
+        var ci = customLc.indexOf(proposed.toLowerCase());
+        var isBuiltin = ENTRY_CATEGORIES.some(function (c) { return c.toLowerCase() === finalCat.toLowerCase(); });
+        if (!isBuiltin && ci !== -1) finalCat = lbcData.customCategories[ci];
+
+        var entry = lbcData.entries[idx];
+        if (entry.category !== finalCat) { entry.category = finalCat; changed++; }
+    }
+
+    saveSett();
+    return { changed: changed, total: lbcData.entries.length };
+}
+
 async function doGenerateField(fieldKey, fieldLabel) {
     if (!genQuiet) throw new Error(T('noLLM'));
     var savedValue = lbcData[fieldKey];
@@ -1075,6 +1419,253 @@ async function doGenerateSingleEntry(category, hint) {
     return entry;
 }
 
+/* ── v1.9: blank entry — no LLM, straight into the editor ── */
+function addBlankEntry(category) {
+    var entry = normalizeEntry({
+        comment: '',
+        key: [],
+        keysecondary: [],
+        content: '',
+        category: category || 'Concept',
+        constant: false,
+        order: 100,
+        position: 0,
+    });
+    lbcData.entries.push(entry);
+    lbcData.editingEntryIdx = lbcData.entries.length - 1;
+    lbcData._edParents = [];
+    renderBody();
+}
+
+/* ── v1.9: generate FROM parent entries ──
+   Parents give the model a precise slice of canon to grow from, instead of the
+   whole book and a prayer. Selection is per editing session (indices are
+   session-stable; a reorder would only happen outside the editor). */
+
+function edParentIdxs() {
+    return (lbcData._edParents || []).filter(function (i) {
+        return i >= 0 && i < lbcData.entries.length && i !== lbcData.editingEntryIdx;
+    });
+}
+
+function buildParentsBlock(idxs) {
+    return idxs.map(function (i, n) {
+        var p = lbcData.entries[i];
+        var content = p._origContent || p.content || '';
+        if (content.length > 1400) content = content.slice(0, 1400) + '…';
+        return 'PARENT ' + (n + 1) + ': ' + (p._origComment || p.comment || 'Untitled')
+            + ' [' + (p.category || 'Unknown') + ']'
+            + (p.key && p.key.length ? ' (keys: ' + p.key.join(', ') + ')' : '')
+            + '\n' + content;
+    }).join('\n\n');
+}
+
+async function doGenerateFromParents(idx) {
+    if (!genQuiet) throw new Error(T('noLLM'));
+    var e = lbcData.entries[idx];
+    if (!e) throw new Error('Entry not found.');
+    var parents = edParentIdxs();
+    if (!parents.length) throw new Error('Pick at least one parent entry.');
+
+    /* The user's typed-but-unsaved editor values are the draft. */
+    saveEntryEditor();
+
+    var draft = [];
+    if (e.comment) draft.push('Title: ' + e.comment);
+    if (e.category) draft.push('Category: ' + e.category);
+    if (e.key && e.key.length) draft.push('Keys: ' + e.key.join(', '));
+    if (e.content && e.content.trim()) draft.push('Notes / partial content to honor:\n' + e.content.trim());
+
+    var prompt = PROMPTS.generateFromParents
+        .replace('{{WORLD_PARAMS}}', gatherWorldParams())
+        .replace('{{PARENTS_BLOCK}}', buildParentsBlock(parents))
+        .replace('{{DRAFT_BLOCK}}', draft.length ? draft.join('\n') : '(nothing yet — invent freely within the parents\' canon)')
+        .replace('{{EXISTING_ENTRIES_BLOCK}}', getExistingEntriesBlock());
+
+    var raw = await lbcGenQuiet(prompt);
+    var data = parseJSON(raw);
+    if (!data || !data.content) throw new Error('Failed to parse entry.');
+
+    var gen = normalizeEntry(data);
+    /* The user's structural decisions survive; the LLM fills the substance.
+       Category/title only fall back to the generated ones when left empty. */
+    e.comment = e.comment || gen.comment;
+    e.category = e.category || gen.category;
+    e.key = (e.key && e.key.length) ? e.key : gen.key;
+    e.keysecondary = (e.keysecondary && e.keysecondary.length) ? e.keysecondary : gen.keysecondary;
+    e.content = gen.content;
+    delete e._origContent; delete e._origComment;
+    await translateEntryIfNeeded(e);
+    return e;
+}
+
+/* ── v1.10: LLM Edit for a single entry ──
+   The CC pattern, scaled to one entry: instruction → the model returns ONLY the
+   changed fields → a Before/After review with per-field checkboxes → apply.
+   Selected parent entries (if any) ride along as canon, same as Enhance. */
+
+var LBC_EDIT_KEYS = ['comment', 'key', 'keysecondary', 'content', 'category', 'constant', 'selective', 'order', 'position', 'depth'];
+
+async function doLLMEditEntry(idx, instruction) {
+    if (!genQuiet) throw new Error(T('noLLM'));
+    var e = lbcData.entries[idx];
+    if (!e) throw new Error('Entry not found.');
+
+    var cur = {
+        comment: e._origComment || e.comment || '',
+        key: e.key || [],
+        keysecondary: e.keysecondary || [],
+        content: e._origContent || e.content || '',
+        category: e.category || '',
+        constant: !!e.constant,
+        selective: !!e.selective,
+        order: e.order || 100,
+        position: e.position || 0,
+        depth: e.depth || 4,
+    };
+
+    var parents = (lbcData.editingEntryIdx === idx) ? edParentIdxs() : [];
+    var parentsBlock = parents.length
+        ? '\nPARENT ENTRIES (canon — stay consistent, never contradict):\n' + buildParentsBlock(parents) + '\n'
+        : '';
+
+    var prompt =
+        '[OOC: You are a lorebook entry editing assistant. Below is ONE entry as JSON, followed by the user\'s edit instruction.\n\n' +
+        'WORLD:\n' + gatherWorldParams() + '\n' +
+        parentsBlock +
+        '\nCURRENT ENTRY:\n' + JSON.stringify(cur, null, 1) + '\n\n' +
+        'EDIT INSTRUCTION:\n"' + instruction + '"\n\n' +
+        'Apply ONLY what the instruction asks for. Rules:\n' +
+        '1. Respond with ONLY a JSON object containing the fields you changed, with their COMPLETE new values.\n' +
+        '2. Use exactly the same keys as in CURRENT ENTRY. Do NOT include unchanged fields.\n' +
+        '3. "key" and "keysecondary" are arrays of strings — return the FULL updated array if changed.\n' +
+        '4. "constant" and "selective" are booleans; "order", "position", "depth" are numbers.\n' +
+        '5. Preserve the original language, tone and formatting. Preserve {{user}} and {{char}} macros as-is.\n' +
+        '6. In "content", keep everything the instruction does not touch — change only what is asked.\n' +
+        'If the instruction changes nothing, respond with {}.\n' +
+        'ONLY valid JSON, no commentary!]';
+
+    var raw = await lbcGenQuiet(prompt);
+    var data = parseJSON(raw);
+    if (!data) throw new Error('Failed to parse LLM response.');
+
+    /* Sanitize: allowed keys only, typed, no-ops dropped. */
+    var changes = {};
+    for (var k in data) {
+        if (!data.hasOwnProperty(k) || LBC_EDIT_KEYS.indexOf(k) === -1) continue;
+        var val = data[k];
+        if (k === 'key' || k === 'keysecondary') {
+            if (!Array.isArray(val)) continue;
+            val = val.map(function (s) { return String(s).trim(); }).filter(Boolean);
+            if (JSON.stringify(val) === JSON.stringify(cur[k])) continue;
+        } else if (k === 'constant' || k === 'selective') {
+            val = !!val;
+            if (val === cur[k]) continue;
+        } else if (k === 'order' || k === 'position' || k === 'depth') {
+            val = parseInt(val);
+            if (isNaN(val) || val === cur[k]) continue;
+        } else {
+            if (val === null || val === undefined) continue;
+            val = String(val);
+            if (val === cur[k]) continue;
+        }
+        changes[k] = val;
+    }
+    return changes;
+}
+
+function lbcEditPreview(v) {
+    if (Array.isArray(v)) return v.join(', ');
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    return String(v);
+}
+
+function lbcShowLLMEditModal(idx) {
+    $('#lbc-le-modal, #lbc-le-overlay').remove();
+    var h = '<div id="lbc-le-overlay"></div>'
+        + '<div id="lbc-le-modal">'
+        + '  <div class="lbc-le-head"><span>✒️ ' + esc(T('llmEdit')) + ' — #' + (idx + 1) + '</span><span class="lbc-le-x" id="lbc-le-close">×</span></div>'
+        + '  <div class="lbc-le-body" id="lbc-le-body">'
+        + '    <div class="lbc-le-hint">' + esc(T('llmEditHint')) + '</div>'
+        + '    <textarea class="lbc-textarea" id="lbc-le-instr" rows="4" placeholder="' + esc(T('llmEditPlaceholder')) + '"></textarea>'
+        + '  </div>'
+        + '  <div class="lbc-le-foot">'
+        + '    <button class="menu_button" id="lbc-le-back" style="display:none"><i class="fa-solid fa-arrow-left"></i> ' + esc(T('llmEditBack')) + '</button>'
+        + '    <span style="flex:1"></span>'
+        + '    <button class="menu_button lbc-btn-primary" id="lbc-le-run"><i class="fa-solid fa-wand-magic-sparkles"></i> ' + esc(T('llmEditRun')) + '</button>'
+        + '    <button class="menu_button lbc-btn-success" id="lbc-le-apply" style="display:none"><i class="fa-solid fa-check"></i> ' + esc(T('llmEditApply')) + '</button>'
+        + '  </div>'
+        + '</div>';
+    $('body').append(h);
+
+    var pending = null;
+
+    function showReview(changes) {
+        pending = changes;
+        var e = lbcData.entries[idx];
+        var bh = '<div class="lbc-le-hint">' + esc(T('llmEditPreviewHint')) + '</div>';
+        for (var k in changes) {
+            if (!changes.hasOwnProperty(k)) continue;
+            var oldV = (k === 'content' && e._origContent) ? e._origContent
+                : (k === 'comment' && e._origComment) ? e._origComment
+                : e[k];
+            bh += '<div class="lbc-le-diff">'
+                + '<label class="lbc-le-diff-head"><input type="checkbox" class="lbc-le-cb" data-k="' + esc(k) + '" checked> <strong>' + esc(k) + '</strong></label>'
+                + '<div class="lbc-le-old"><span>' + esc(T('llmEditBefore')) + '</span>' + esc(lbcEditPreview(oldV === undefined ? '' : oldV)) + '</div>'
+                + '<div class="lbc-le-new"><span>' + esc(T('llmEditAfter')) + '</span>' + esc(lbcEditPreview(changes[k])) + '</div>'
+                + '</div>';
+        }
+        $('#lbc-le-body').html(bh);
+        $('#lbc-le-run').hide(); $('#lbc-le-apply, #lbc-le-back').show();
+    }
+
+    $('#lbc-le-close, #lbc-le-overlay').on('click', function () { $('#lbc-le-modal, #lbc-le-overlay').remove(); });
+
+    $('#lbc-le-back').on('click', function () {
+        pending = null;
+        $('#lbc-le-body').html('<div class="lbc-le-hint">' + esc(T('llmEditHint')) + '</div>'
+            + '<textarea class="lbc-textarea" id="lbc-le-instr" rows="4" placeholder="' + esc(T('llmEditPlaceholder')) + '"></textarea>');
+        $('#lbc-le-apply, #lbc-le-back').hide(); $('#lbc-le-run').show();
+    });
+
+    $('#lbc-le-run').on('click', async function () {
+        if (lbcBusy) return;
+        var instr = String($('#lbc-le-instr').val() || '').trim();
+        if (!instr) { showStatus(T('llmEditInstrEmpty'), 'error'); return; }
+        lbcBusy = true;
+        var $b = $(this).prop('disabled', true).html('<i class="fa-solid fa-circle-notch fa-spin"></i> ' + esc(T('generating')));
+        try {
+            saveEntryEditor();   /* the on-screen text is the truth */
+            var changes = await doLLMEditEntry(idx, instr);
+            if (!Object.keys(changes).length) showStatus(T('llmEditNoChanges'), 'info');
+            else showReview(changes);
+        } catch (e) { showStatus(e.message, 'error'); }
+        $b.prop('disabled', false).html('<i class="fa-solid fa-wand-magic-sparkles"></i> ' + esc(T('llmEditRun')));
+        lbcBusy = false;
+    });
+
+    $('#lbc-le-apply').on('click', async function () {
+        if (!pending) return;
+        var e = lbcData.entries[idx];
+        var n = 0;
+        $('.lbc-le-cb:checked').each(function () {
+            var k = $(this).data('k');
+            if (!pending.hasOwnProperty(k)) return;
+            e[k] = pending[k];
+            if (k === 'content') delete e._origContent;
+            if (k === 'comment') delete e._origComment;
+            n++;
+        });
+        if (n && (e._origContent !== undefined || e._origComment !== undefined)) {
+            /* mixed translated state after a partial edit — retranslate lazily */
+        }
+        await translateEntryIfNeeded(e);
+        $('#lbc-le-modal, #lbc-le-overlay').remove();
+        renderBody();
+        showStatus(n + ' ' + T('llmEditDone'), 'success');
+    });
+}
+
 async function doRegenerateEntry(idx) {
     if (!genQuiet) throw new Error(T('noLLM'));
     var entry = lbcData.entries[idx];
@@ -1104,8 +1695,18 @@ async function doEnhanceEntry(idx) {
     if (origEntry._origContent) origEntry.content = origEntry._origContent;
     if (origEntry._origComment) origEntry.comment = origEntry._origComment;
 
+    /* v1.9.1: if the editor has parent entries selected, they become canon for
+       the enhancement too — Enhance grows the entry INTO its parents' corner of
+       the world instead of drifting off on world params alone. */
+    var parents = (lbcData.editingEntryIdx === idx) ? edParentIdxs() : [];
+    var parentsBlock = parents.length
+        ? '\nPARENT ENTRIES (canon — stay consistent with them, connect to them where natural, never contradict):\n'
+            + buildParentsBlock(parents) + '\n'
+        : '';
+
     var prompt = PROMPTS.enhanceEntry
         .replace('{{WORLD_PARAMS}}', gatherWorldParams())
+        .replace('{{PARENTS_BLOCK}}', parentsBlock)
         .replace('{{CURRENT_ENTRY}}', JSON.stringify({
             comment: origEntry.comment,
             key: origEntry.key,
@@ -1163,6 +1764,584 @@ async function doExpandEntries(count) {
 }
 
 /* ══════════════════════════════════════
+   MERGE LOREBOOKS
+   ══════════════════════════════════════ */
+
+/* Build the text block describing every source book for the merge prompt.
+   Each book is { name: string, entries: [normalized entries] }.
+   Entry content is truncated to keep the prompt within a sane size. */
+function buildMergeSourceBlock(books) {
+    var CONTENT_CAP = 700; // chars per entry sent to the LLM
+    var blocks = [];
+    for (var b = 0; b < books.length; b++) {
+        var book = books[b];
+        var lines = ['### LOREBOOK ' + (b + 1) + ': ' + (book.name || ('Book ' + (b + 1)))];
+        for (var i = 0; i < book.entries.length; i++) {
+            var e = book.entries[i];
+            var content = (e._origContent || e.content || '');
+            if (content.length > CONTENT_CAP) content = content.substring(0, CONTENT_CAP) + '…';
+            lines.push(
+                '- [' + (e.category || '?') + '] ' + (e._origComment || e.comment || 'Untitled') +
+                ' (keys: ' + (e.key || []).join(', ') + ')\n' +
+                '  ' + content.replace(/\n+/g, ' ')
+            );
+        }
+        blocks.push(lines.join('\n'));
+    }
+    return blocks.join('\n\n');
+}
+
+/* Merge several parsed lorebooks into a single harmonized one via the LLM.
+   `books` is an array of { name, entries }. Replaces lbcData.entries with the
+   merged result and updates worldName/worldDescription. */
+async function doMergeLorebooks(books) {
+    if (!genQuiet) throw new Error(T('noLLM'));
+    if (!books || books.length < 2) throw new Error(T('mergeNeedTwo'));
+
+    var total = books.reduce(function (n, bk) { return n + (bk.entries ? bk.entries.length : 0); }, 0);
+    if (!total) throw new Error(T('mergeNoEntries'));
+
+    var prompt = PROMPTS.mergeLorebooks
+        .replace('{{BOOK_COUNT}}', String(books.length))
+        .replace('{{SOURCE_BOOKS}}', buildMergeSourceBlock(books));
+
+    var raw = await lbcGenQuiet(prompt);
+    var data = parseJSON(raw);
+    if (!data || !data.entries || !Array.isArray(data.entries) || !data.entries.length)
+        throw new Error(T('mergeFailed'));
+
+    var merged = normalizeEntries(data.entries);
+    await translateEntriesIfNeeded(merged);
+    lbcData.entries = merged;
+
+    if (data.worldName) {
+        lbcData.worldName = data.worldName;
+        if (lbcData._translated && translateFn) {
+            lbcData._origWorldName = data.worldName;
+            lbcData.worldName = await tr(data.worldName);
+        }
+    }
+    if (data.worldDescription) {
+        lbcData.worldDescription = data.worldDescription;
+        if (lbcData._translated && translateFn) {
+            lbcData._origWorldDesc = data.worldDescription;
+            lbcData.worldDescription = await tr(data.worldDescription);
+        }
+    }
+
+    /* Surface any non-builtin categories as reusable buttons (same as Load). */
+    if (!lbcData.customCategories) lbcData.customCategories = [];
+    lbcData.entries.forEach(function (en) {
+        var c = (en.category || '').trim(); if (!c) return;
+        var lc = c.toLowerCase();
+        var builtin = ENTRY_CATEGORIES.some(function (x) { return x.toLowerCase() === lc; });
+        var have = lbcData.customCategories.some(function (x) { return x.toLowerCase() === lc; });
+        if (!builtin && !have) lbcData.customCategories.push(c);
+    });
+
+    return merged;
+}
+
+/* ══════════════════════════════════════
+   MERGE WORKSPACE  (v1.12)
+
+   Side-by-side comparison of two lorebooks with selective transfer.
+   Scales to books far beyond a single whole-book LLM request:
+     1. Deterministic matching (title/key overlap) builds candidate pairs —
+        free, instant, cannot hallucinate.
+     2. Optional LLM Analysis on a compact DIGEST finds semantic duplicates
+        and conflicts the mechanics missed.
+     3. Unique entries are copied over verbatim — no LLM, nothing to lose.
+     4. Only the contested pairs go to the LLM, in small batches.
+   The old whole-book merge survives as the "Full LLM merge" button.
+   ══════════════════════════════════════ */
+
+var lbcMG = null;
+
+function lbcMGReset() {
+    lbcMG = {
+        A: null, B: null,        // { name, entries, isCurrent }
+        pairs: [],               // { a, b, relation, reason, source:'auto'|'llm', choice:'merge'|'A'|'B'|'both' }
+        onlyA: [], onlyB: [],    // indices with no counterpart
+        incA: {}, incB: {},      // idx -> false when the user excluded a unique entry
+        notes: []                // LLM analysis notes
+    };
+}
+
+/* Normalized title for matching: lowercased, "— Category" suffix stripped. */
+function lbcMGTitleKey(e) {
+    var t = String(e._origComment || e.comment || '').toLowerCase();
+    t = t.replace(/—\s*[^—]*$/, '');
+    return t.replace(/[^a-zа-яё0-9À-ɏ一-鿿]+/gi, ' ').trim();
+}
+
+/* Similarity between two entries: exact title = 1, else key overlap ratio,
+   boosted when one title contains the other. */
+function lbcMGSim(ea, eb) {
+    var ta = lbcMGTitleKey(ea), tb = lbcMGTitleKey(eb);
+    if (ta && ta === tb) return 1;
+    var ka = (ea.key || []).map(function (x) { return String(x).toLowerCase().trim(); }).filter(Boolean);
+    var kb = (eb.key || []).map(function (x) { return String(x).toLowerCase().trim(); }).filter(Boolean);
+    var score = 0;
+    if (ka.length && kb.length) {
+        var shared = ka.filter(function (x) { return kb.indexOf(x) !== -1; }).length;
+        score = shared / Math.min(ka.length, kb.length);
+    }
+    if (ta && tb && ta.length > 3 && tb.length > 3 && (ta.indexOf(tb) !== -1 || tb.indexOf(ta) !== -1))
+        score = Math.max(score, 0.7);
+    return score;
+}
+
+/* Greedy best-match pairing between A and B, then unique lists. */
+function lbcMGComputePairs() {
+    var A = lbcMG.A.entries, B = lbcMG.B.entries;
+    var pairs = [], usedB = {};
+    for (var i = 0; i < A.length; i++) {
+        var best = -1, bestScore = 0;
+        for (var j = 0; j < B.length; j++) {
+            if (usedB[j]) continue;
+            var s = lbcMGSim(A[i], B[j]);
+            if (s > bestScore) { bestScore = s; best = j; }
+        }
+        if (best !== -1 && bestScore >= 0.5) {
+            usedB[best] = 1;
+            pairs.push({
+                a: i, b: best, relation: 'duplicate', source: 'auto', choice: 'merge',
+                reason: Math.round(bestScore * 100) + '% key/title overlap'
+            });
+        }
+    }
+    lbcMG.pairs = pairs;
+    lbcMG.incA = {}; lbcMG.incB = {};
+    lbcMGRecomputeUnique();
+}
+
+function lbcMGRecomputeUnique() {
+    var inA = {}, inB = {};
+    lbcMG.pairs.forEach(function (p) { inA[p.a] = 1; inB[p.b] = 1; });
+    lbcMG.onlyA = lbcMG.A.entries.map(function (_, i) { return i; }).filter(function (i) { return !inA[i]; });
+    lbcMG.onlyB = lbcMG.B.entries.map(function (_, i) { return i; }).filter(function (i) { return !inB[i]; });
+}
+
+/* How many entries the current selection would produce. */
+function lbcMGEstimate() {
+    var n = 0;
+    lbcMG.pairs.forEach(function (p) { n += (p.choice === 'both') ? 2 : 1; });
+    lbcMG.onlyA.forEach(function (i) { if (lbcMG.incA[i] !== false) n++; });
+    lbcMG.onlyB.forEach(function (i) { if (lbcMG.incB[i] !== false) n++; });
+    return n;
+}
+
+/* ── modal ── */
+
+function lbcShowMergeModal() {
+    $('#lbc-mg-modal, #lbc-mg-overlay').remove();
+    lbcMGReset();
+
+    var h = '<div id="lbc-mg-overlay"></div><div id="lbc-mg-modal">';
+    h += '<div class="lbc-opt-head"><b><i class="fa-solid fa-code-merge"></i> ' + esc(T('mgTitle')) + '</b>';
+    h += '<button class="menu_button" id="lbc-mg-close"><i class="fa-solid fa-xmark"></i></button></div>';
+    h += '<div class="lbc-mg-slots" id="lbc-mg-slots"></div>';
+    h += '<div class="lbc-mg-body" id="lbc-mg-body"></div>';
+    h += '<div class="lbc-mg-foot" id="lbc-mg-foot"></div>';
+    h += '<input type="file" id="lbc-file-mg" accept=".json" style="display:none">';
+    h += '</div>';
+    $('body').append(h);
+
+    var $m = $('#lbc-mg-modal');
+
+    $('#lbc-mg-close, #lbc-mg-overlay').on('click', function () {
+        if (lbcBusy) return;
+        $('#lbc-mg-modal, #lbc-mg-overlay').remove(); lbcMG = null;
+    });
+
+    $m.on('click', '.lbc-mg-load', function () {
+        lbcMG._pick = $(this).data('slot');
+        $('#lbc-file-mg').trigger('click');
+    });
+
+    $m.on('change', '#lbc-file-mg', async function () {
+        var file = this.files && this.files[0];
+        this.value = '';
+        if (!file || !lbcMG) return;
+        try {
+            var json = JSON.parse(await readFileAsText(file));
+            var entries = parseLorebookEntries(json);
+            if (!entries.length) { lbcMGStatus(T('noEntriesInFile'), true); return; }
+            lbcMG[lbcMG._pick === 'B' ? 'B' : 'A'] = {
+                name: json._name || json.name || file.name.replace(/\.json$/i, ''),
+                entries: entries, isCurrent: false
+            };
+            if (lbcMG.A && lbcMG.B) lbcMGComputePairs();
+            lbcMGRender();
+        } catch (e) { lbcMGStatus(e.message, true); }
+    });
+
+    $m.on('click', '.lbc-mg-usecur', function () {
+        if (!lbcMG || !lbcData.entries.length) return;
+        var slot = $(this).data('slot');
+        lbcMG[slot] = {
+            name: lbcData._origWorldName || lbcData.worldName || 'Current entries',
+            entries: lbcData.entries.slice(), isCurrent: true
+        };
+        if (lbcMG.A && lbcMG.B) lbcMGComputePairs();
+        lbcMGRender();
+    });
+
+    $m.on('click', '.lbc-mg-slot-x', function () {
+        if (lbcBusy) return;
+        lbcMG[$(this).data('slot')] = null;
+        lbcMG.pairs = []; lbcMG.onlyA = []; lbcMG.onlyB = []; lbcMG.notes = [];
+        lbcMGRender();
+    });
+
+    $m.on('click', '.lbc-mg-choice span', function () {
+        var pi = parseInt($(this).closest('.lbc-mg-pair').data('pi'));
+        if (isNaN(pi) || !lbcMG.pairs[pi]) return;
+        lbcMG.pairs[pi].choice = $(this).data('c');
+        $(this).siblings().removeClass('active'); $(this).addClass('active');
+        lbcMGRenderFoot();
+    });
+
+    $m.on('click', '.lbc-mg-uniq', function () {
+        var slot = $(this).data('slot'), i = parseInt($(this).data('i'));
+        var inc = slot === 'A' ? lbcMG.incA : lbcMG.incB;
+        inc[i] = (inc[i] === false);
+        $(this).toggleClass('off', inc[i] === false);
+        lbcMGRenderFoot();
+    });
+
+    $m.on('click', '#lbc-mg-analyze', lbcMGAnalyze);
+    $m.on('click', '#lbc-mg-run', lbcMGExecute);
+    $m.on('click', '#lbc-mg-full', lbcMGFullLLM);
+
+    lbcMGRender();
+}
+
+function lbcMGStatus(msg, isErr) {
+    $('#lbc-mg-status').text(msg || '').css('color', isErr ? 'rgba(231,76,60,.85)' : '');
+}
+
+function lbcMGSnippet(e, cap) {
+    var c = String(e._origContent || e.content || '').replace(/\s+/g, ' ').trim();
+    return esc(c.length > cap ? c.substring(0, cap) + '…' : c);
+}
+
+function lbcMGSlotHtml(slot) {
+    var bk = lbcMG[slot];
+    var h = '<div class="lbc-mg-slot' + (bk ? ' filled' : '') + '" data-slot="' + slot + '">';
+    h += '<div class="lbc-mg-slot-tag">' + slot + '</div>';
+    if (bk) {
+        h += '<div class="lbc-mg-slot-name" title="' + esc(bk.name) + '">' + esc(bk.name) + '</div>';
+        h += '<div class="lbc-mg-slot-count">' + bk.entries.length + ' ' + esc(T('entriesWord')) + '</div>';
+        h += '<span class="lbc-mg-slot-x" data-slot="' + slot + '" title="Clear">×</span>';
+    } else {
+        h += '<button class="menu_button lbc-mg-load" data-slot="' + slot + '"><i class="fa-solid fa-folder-open"></i> ' + esc(T('mgLoadFile')) + '</button>';
+        var otherCur = (lbcMG.A && lbcMG.A.isCurrent) || (lbcMG.B && lbcMG.B.isCurrent);
+        if (lbcData.entries.length && !otherCur) {
+            h += '<button class="menu_button lbc-mg-usecur" data-slot="' + slot + '"><i class="fa-solid fa-pen-to-square"></i> ' + esc(T('mgUseCurrent')) + '</button>';
+        }
+    }
+    h += '</div>';
+    return h;
+}
+
+function lbcMGRender() {
+    if (!lbcMG || !document.getElementById('lbc-mg-modal')) return;
+    $('#lbc-mg-slots').html(lbcMGSlotHtml('A') + lbcMGSlotHtml('B'));
+
+    var h = '';
+    if (!lbcMG.A || !lbcMG.B) {
+        h = '<div class="lbc-mg-hint"><i class="fa-solid fa-scale-balanced" style="font-size:28px;display:block;margin-bottom:10px"></i>' + esc(T('mgPickBoth')) + '</div>';
+    } else {
+        var A = lbcMG.A.entries, B = lbcMG.B.entries;
+
+        if (lbcMG.notes.length) {
+            h += '<div class="lbc-opt-section">' + esc(T('mgNotes')) + '</div>';
+            lbcMG.notes.forEach(function (n) { h += '<div class="lbc-mg-note">' + esc(n) + '</div>'; });
+        }
+
+        h += '<div class="lbc-opt-section">' + esc(T('mgPairsTitle')) + ' (' + lbcMG.pairs.length + ')</div>';
+        if (!lbcMG.pairs.length) {
+            h += '<div class="lbc-mg-hint" style="padding:12px">' + esc(T('mgNoPairs')) + '</div>';
+        }
+        lbcMG.pairs.forEach(function (p, pi) {
+            var ea = A[p.a], eb = B[p.b];
+            if (!ea || !eb) return;
+            h += '<div class="lbc-mg-pair" data-pi="' + pi + '">';
+            h += '<div class="lbc-mg-pair-main">';
+            h += '<div class="lbc-mg-pv"><span class="lbc-mg-tag a">A</span><b>' + esc(ea._origComment || ea.comment || 'Untitled') + '</b> <span class="lbc-mg-cat">[' + esc(ea.category || '?') + ']</span><div class="lbc-mg-snippet">' + lbcMGSnippet(ea, 110) + '</div></div>';
+            h += '<div class="lbc-mg-pv"><span class="lbc-mg-tag b">B</span><b>' + esc(eb._origComment || eb.comment || 'Untitled') + '</b> <span class="lbc-mg-cat">[' + esc(eb.category || '?') + ']</span><div class="lbc-mg-snippet">' + lbcMGSnippet(eb, 110) + '</div></div>';
+            h += '<div class="lbc-mg-reason"><span class="lbc-mg-rel ' + esc(p.relation) + '">' + esc(p.relation) + '</span>' + esc(p.reason || '') + '</div>';
+            h += '</div>';
+            h += '<div class="lbc-mg-choice">';
+            [['merge', '⚡ ' + T('mgChoiceMerge')], ['A', 'A'], ['B', 'B'], ['both', T('mgChoiceBoth')]].forEach(function (c) {
+                h += '<span data-c="' + c[0] + '"' + (p.choice === c[0] ? ' class="active"' : '') + '>' + esc(c[1]) + '</span>';
+            });
+            h += '</div></div>';
+        });
+
+        [['A', lbcMG.onlyA, lbcMG.incA], ['B', lbcMG.onlyB, lbcMG.incB]].forEach(function (side) {
+            var slot = side[0], list = side[1], inc = side[2];
+            if (!list.length) return;
+            h += '<div class="lbc-opt-section">' + esc(T('mgOnlyIn')) + ' ' + slot + ' (' + list.length + ') <span style="text-transform:none;letter-spacing:0;opacity:.7">— ' + esc(T('mgExcludedHint')) + '</span></div>';
+            var src = slot === 'A' ? lbcMG.A.entries : lbcMG.B.entries;
+            list.forEach(function (i) {
+                var e = src[i];
+                h += '<div class="lbc-mg-uniq' + (inc[i] === false ? ' off' : '') + '" data-slot="' + slot + '" data-i="' + i + '">';
+                h += '<span class="lbc-mg-tag ' + slot.toLowerCase() + '">' + slot + '</span><b>' + esc(e._origComment || e.comment || 'Untitled') + '</b> <span class="lbc-mg-cat">[' + esc(e.category || '?') + ']</span>';
+                h += '<div class="lbc-mg-snippet">' + lbcMGSnippet(e, 110) + '</div></div>';
+            });
+        });
+    }
+    $('#lbc-mg-body').html(h);
+    lbcMGRenderFoot();
+}
+
+function lbcMGRenderFoot() {
+    if (!lbcMG) return;
+    var ready = !!(lbcMG.A && lbcMG.B);
+    var h = '';
+    if (ready) {
+        h += '<button class="menu_button lbc-btn-primary" id="lbc-mg-analyze"><i class="fa-solid fa-magnifying-glass-chart"></i> ' + esc(T('mgAnalyze')) + '</button>';
+        h += '<button class="menu_button" id="lbc-mg-full" title="' + esc(T('mgFullLLMHint')) + '"><i class="fa-solid fa-wand-magic-sparkles"></i> ' + esc(T('mgFullLLM')) + '</button>';
+    }
+    h += '<span id="lbc-mg-status"></span>';
+    if (ready) {
+        var mergeN = lbcMG.pairs.filter(function (p) { return p.choice === 'merge'; }).length;
+        h += '<span class="lbc-mg-count">' + esc(T('mgResult')) + ': ~' + lbcMGEstimate() + ' ' + esc(T('entriesWord')) + (mergeN ? ' · ' + mergeN + ' LLM' : '') + '</span>';
+        h += '<button class="menu_button lbc-btn-success" id="lbc-mg-run"><i class="fa-solid fa-code-merge"></i> ' + esc(T('mgRun')) + '</button>';
+    }
+    $('#lbc-mg-foot').html(h);
+}
+
+/* ── LLM analysis: digest both books, find semantic pairs + conflicts ── */
+
+function lbcMGDigest(entries, snipLen) {
+    return entries.map(function (e, i) {
+        var c = String(e._origContent || e.content || '').replace(/\s+/g, ' ').trim().substring(0, snipLen);
+        return i + ' | [' + (e.category || '?') + '] ' + (e._origComment || e.comment || 'Untitled') +
+            ' | keys: ' + (e.key || []).join(', ') + ' | ' + c;
+    }).join('\n');
+}
+
+/* Pull a short REAL sample of the source text. "SAME LANGUAGE as the lorebooks"
+   alone is too weak — some models drift to English or German. Anchoring the
+   output language to a concrete sample fixes the target for any language. */
+function lbcLangSample(entryLists) {
+    var pool = [];
+    (entryLists || []).forEach(function (list) {
+        (list || []).slice(0, 10).forEach(function (e) {
+            var t = String(e._origContent || e.content || e._origComment || e.comment || '').trim();
+            if (t) pool.push(t);
+        });
+    });
+    return pool.join(' ').replace(/\s+/g, ' ').trim().substring(0, 240);
+}
+
+function lbcLangLine(entryLists) {
+    var sample = lbcLangSample(entryLists);
+    if (!sample) return '';
+    return 'CRITICAL LANGUAGE RULE: write ALL free text you output (reasons, notes, merged content) ' +
+        'in the SAME language as this sample from the source lorebooks — do NOT switch to English, German or any other language:\n' +
+        '"' + sample + '"\n\n';
+}
+
+async function lbcMGAnalyze() {
+    if (lbcBusy || !lbcMG || !lbcMG.A || !lbcMG.B) return;
+    if (!genQuiet) { lbcMGStatus(T('noLLM'), true); return; }
+    lbcBusy = true;
+    var $b = $('#lbc-mg-analyze').prop('disabled', true).html('<i class="fa-solid fa-circle-notch fa-spin"></i> ' + esc(T('mgAnalyzing')));
+    lbcMGStatus(T('mgAnalyzing'));
+    try {
+        var A = lbcMG.A.entries, B = lbcMG.B.entries;
+        // Adaptive snippet length keeps big books inside one request.
+        var snip = (A.length + B.length > 120) ? 80 : 150;
+        var known = lbcMG.pairs.map(function (p) {
+            return 'A#' + p.a + ' <-> B#' + p.b + ' (' + (A[p.a].comment || '') + ')';
+        }).join('\n') || '(none)';
+
+        var prompt = PROMPTS.mergeAnalyze
+            .replace('{{NAME_A}}', lbcMG.A.name).replace('{{NAME_B}}', lbcMG.B.name)
+            .replace('{{DIGEST_A}}', lbcMGDigest(A, snip))
+            .replace('{{DIGEST_B}}', lbcMGDigest(B, snip))
+            .replace('{{KNOWN_PAIRS}}', known)
+            .replace('{{LANG_LINE}}', lbcLangLine([A, B]));
+
+        var raw = await lbcGenQuiet(prompt);
+        var data = parseJSON(raw);
+        if (!data) throw new Error(T('mergeFailed'));
+
+        var usedA = {}, usedB = {};
+        lbcMG.pairs.forEach(function (p) { usedA[p.a] = p; usedB[p.b] = p; });
+        (Array.isArray(data.pairs) ? data.pairs : []).forEach(function (p) {
+            var a = parseInt(p.a), b = parseInt(p.b);
+            if (isNaN(a) || isNaN(b) || a < 0 || a >= A.length || b < 0 || b >= B.length) return;
+            var rel = (p.relation === 'conflict' || p.relation === 'related') ? p.relation : 'duplicate';
+            if (usedA[a] && usedA[a].b === b) {
+                // Enrich the mechanically found pair with the LLM's verdict.
+                usedA[a].relation = rel;
+                if (p.reason) usedA[a].reason = String(p.reason);
+                usedA[a].source = 'llm';
+                if (rel === 'related') usedA[a].choice = 'both';
+                return;
+            }
+            if (usedA[a] || usedB[b]) return;   // conflicting pairing — first wins
+            var np = { a: a, b: b, relation: rel, reason: String(p.reason || ''), source: 'llm', choice: rel === 'related' ? 'both' : 'merge' };
+            lbcMG.pairs.push(np); usedA[a] = np; usedB[b] = np;
+        });
+        lbcMG.notes = (Array.isArray(data.notes) ? data.notes : []).slice(0, 6).map(String);
+        lbcMGRecomputeUnique();
+        lbcMGRender();
+        lbcMGStatus(T('mgAnalyzeDone') + ' — ' + lbcMG.pairs.length + ' ' + T('mgPairsTitle').toLowerCase());
+    } catch (e) { E('MG analyze:', e); lbcMGStatus(e.message, true); }
+    lbcBusy = false;
+    $('#lbc-mg-analyze').prop('disabled', false).html('<i class="fa-solid fa-magnifying-glass-chart"></i> ' + esc(T('mgAnalyze')));
+}
+
+/* ── execute: copy unique + chosen sides verbatim, LLM-merge contested pairs in batches ── */
+
+async function lbcMGExecute() {
+    if (lbcBusy || !lbcMG || !lbcMG.A || !lbcMG.B) return;
+    var A = lbcMG.A.entries, B = lbcMG.B.entries;
+
+    var out = [], toMerge = [];
+    lbcMG.pairs.forEach(function (p) {
+        if (!A[p.a] || !B[p.b]) return;
+        if (p.choice === 'A') out.push(A[p.a]);
+        else if (p.choice === 'B') out.push(B[p.b]);
+        else if (p.choice === 'both') { out.push(A[p.a]); out.push(B[p.b]); }
+        else toMerge.push(p);
+    });
+    lbcMG.onlyA.forEach(function (i) { if (lbcMG.incA[i] !== false) out.push(A[i]); });
+    lbcMG.onlyB.forEach(function (i) { if (lbcMG.incB[i] !== false) out.push(B[i]); });
+
+    if (!out.length && !toMerge.length) { lbcMGStatus(T('mgNothing'), true); return; }
+    if (toMerge.length && !genQuiet) { lbcMGStatus(T('noLLM'), true); return; }
+    if (lbcData.entries.length && !lbcMG.A.isCurrent && !lbcMG.B.isCurrent) {
+        if (!confirm(T('mgReplaceConfirm'))) return;
+    }
+
+    lbcBusy = true;
+    var $b = $('#lbc-mg-run').prop('disabled', true).html('<i class="fa-solid fa-circle-notch fa-spin"></i>');
+    $('#lbc-mg-analyze, #lbc-mg-full').prop('disabled', true);
+
+    var failed = 0, mergedNew = [];
+    var BATCH = 5, CAP = 1500;
+    try {
+        for (var c = 0; c < toMerge.length; c += BATCH) {
+            var batch = toMerge.slice(c, c + BATCH);
+            lbcMGStatus(T('mgMergingPair') + ' ' + (c + 1) + '–' + Math.min(c + BATCH, toMerge.length) + ' / ' + toMerge.length + '...');
+
+            var block = batch.map(function (p, n) {
+                function fmt(e) {
+                    var content = String(e._origContent || e.content || '');
+                    if (content.length > CAP) content = content.substring(0, CAP) + '…';
+                    return (e._origComment || e.comment || 'Untitled') + ' [' + (e.category || '?') + ']' +
+                        ' (keys: ' + (e.key || []).join(', ') +
+                        ((e.keysecondary || []).length ? ' | sec: ' + e.keysecondary.join(', ') : '') + ')\n' + content;
+                }
+                return 'PAIR ' + n + (p.relation === 'conflict' ? ' (sources CONTRADICT each other — reconcile carefully)' : '') +
+                    ':\nVERSION A: ' + fmt(A[p.a]) + '\nVERSION B: ' + fmt(B[p.b]);
+            }).join('\n\n');
+
+            var batchEntries = [];
+            batch.forEach(function (p) { batchEntries.push(A[p.a]); batchEntries.push(B[p.b]); });
+            var prompt = PROMPTS.mergePair
+                .replace('{{PAIR_COUNT}}', String(batch.length))
+                .replace('{{PAIRS_BLOCK}}', block)
+                .replace('{{LANG_LINE}}', lbcLangLine([batchEntries]));
+
+            var raw = await lbcGenQuiet(prompt);
+            var data = parseJSON(raw);
+            var got = {};
+            var arr = data && Array.isArray(data.merged) ? data.merged
+                : (data && Array.isArray(data.entries) ? data.entries : []);
+            arr.forEach(function (m, mi) {
+                var pi = parseInt(m.pair);
+                if (isNaN(pi)) pi = mi;                     // model dropped the index — trust order
+                if (pi < 0 || pi >= batch.length || got[pi] || !m.content) return;
+                got[pi] = 1;
+                var pa = A[batch[pi].a], pb = B[batch[pi].b];
+                // LLM supplies the text; mechanical fields inherit from the sources.
+                mergedNew.push(normalizeEntry({
+                    comment: m.comment || pa.comment,
+                    key: (Array.isArray(m.key) && m.key.length) ? m.key : pa.key,
+                    keysecondary: Array.isArray(m.keysecondary) ? m.keysecondary : pa.keysecondary,
+                    content: m.content,
+                    category: m.category || pa.category,
+                    constant: pa.constant || pb.constant,
+                    selective: pa.selective, selectiveLogic: pa.selectiveLogic,
+                    order: Math.max(pa.order || 100, pb.order || 100),
+                    position: pa.position, depth: pa.depth,
+                    group: pa.group, groupWeight: pa.groupWeight,
+                    preventRecursion: pa.preventRecursion || pb.preventRecursion,
+                    excludeRecursion: pa.excludeRecursion,
+                    matchWholeWords: pa.matchWholeWords,
+                    sticky: pa.sticky, cooldown: pa.cooldown, probability: pa.probability
+                }));
+            });
+            // Anything the model failed to return survives as both originals.
+            batch.forEach(function (p, n) {
+                if (!got[n]) { out.push(A[p.a]); out.push(B[p.b]); failed++; }
+            });
+        }
+
+        await translateEntriesIfNeeded(mergedNew);
+        lbcData.entries = out.concat(mergedNew);
+
+        // Two files merged: name the result after both. Editor-based merges keep their name.
+        if (!lbcMG.A.isCurrent && !lbcMG.B.isCurrent) {
+            lbcData.worldName = lbcMG.A.name + ' + ' + lbcMG.B.name;
+            lbcData._origWorldName = null;
+        }
+
+        lbcAdoptCategories();
+        $('#lbc-mg-modal, #lbc-mg-overlay').remove();
+        lbcMG = null;
+        lbcShowEntries();
+        var msg = T('mgDone') + ' — ' + lbcData.entries.length + ' ' + T('entriesWord');
+        if (failed) msg += ' (' + failed + ' ' + T('mgFailedPairs') + ')';
+        showStatus(msg, failed ? 'info' : 'success');
+    } catch (e) {
+        E('MG execute:', e);
+        lbcMGStatus(e.message, true);
+        $b.prop('disabled', false).html('<i class="fa-solid fa-code-merge"></i> ' + esc(T('mgRun')));
+        $('#lbc-mg-analyze, #lbc-mg-full').prop('disabled', false);
+    }
+    lbcBusy = false;
+}
+
+/* ── legacy path: both books whole in one request (small books only) ── */
+
+async function lbcMGFullLLM() {
+    if (lbcBusy || !lbcMG || !lbcMG.A || !lbcMG.B) return;
+    if (!genQuiet) { lbcMGStatus(T('noLLM'), true); return; }
+    if (!confirm(T('mgFullConfirm'))) return;
+    lbcBusy = true;
+    var $b = $('#lbc-mg-full').prop('disabled', true).html('<i class="fa-solid fa-circle-notch fa-spin"></i>');
+    $('#lbc-mg-analyze, #lbc-mg-run').prop('disabled', true);
+    lbcMGStatus(T('merging'));
+    try {
+        var books = [
+            { name: lbcMG.A.name, entries: lbcMG.A.entries },
+            { name: lbcMG.B.name, entries: lbcMG.B.entries }
+        ];
+        var merged = await doMergeLorebooks(books);
+        $('#lbc-mg-modal, #lbc-mg-overlay').remove();
+        lbcMG = null;
+        lbcShowEntries();
+        showStatus(merged.length + ' ' + T('mergeSuccess'), 'success');
+    } catch (e) {
+        E('MG full:', e);
+        lbcMGStatus(e.message, true);
+        $b.prop('disabled', false).html('<i class="fa-solid fa-wand-magic-sparkles"></i> ' + esc(T('mgFullLLM')));
+        $('#lbc-mg-analyze, #lbc-mg-run').prop('disabled', false);
+    }
+    lbcBusy = false;
+}
+
+/* ══════════════════════════════════════
    ENTRY NORMALIZATION
    ══════════════════════════════════════ */
 
@@ -1172,14 +2351,28 @@ function normalizeEntry(raw) {
         key: Array.isArray(raw.key) ? raw.key : (typeof raw.key === 'string' ? raw.key.split(',').map(function (s) { return s.trim(); }) : []),
         keysecondary: Array.isArray(raw.keysecondary) ? raw.keysecondary : [],
         content: raw.content || '',
-        category: raw.category || 'Supplementary',
+        category: canonicalizeCategory(raw.category),
         constant: !!raw.constant,
         selective: !!raw.selective,
         order: parseInt(raw.order) || 100,
         position: parseInt(raw.position) || 0,
         depth: parseInt(raw.depth) || 4,
-        disable: false,
-        probability: (raw.probability !== undefined && raw.probability !== null) ? (parseInt(raw.probability) || 100) : 100
+        // BUGFIX: this used to be hardcoded `false`, which silently re-enabled
+        // every disabled entry on import.
+        disable: !!raw.disable,
+        probability: (raw.probability !== undefined && raw.probability !== null) ? (parseInt(raw.probability) || 100) : 100,
+
+        /* ── Targeting fields. Previously dropped by the model and hardcoded on
+           export, which made group / sticky / recursion guards unrepresentable. ── */
+        selectiveLogic: (raw.selectiveLogic !== undefined && raw.selectiveLogic !== null) ? parseInt(raw.selectiveLogic) : 0,
+        group: raw.group || '',
+        groupWeight: parseInt(raw.groupWeight) || 100,
+        useGroupScoring: (raw.useGroupScoring === true),
+        preventRecursion: !!raw.preventRecursion,
+        excludeRecursion: !!raw.excludeRecursion,
+        matchWholeWords: (raw.matchWholeWords === true || raw.matchWholeWords === false) ? raw.matchWholeWords : null,
+        sticky: parseInt(raw.sticky) || 0,
+        cooldown: (raw.cooldown !== undefined && raw.cooldown !== null) ? (parseInt(raw.cooldown) || null) : null
     };
 }
 
@@ -1201,24 +2394,43 @@ function exportAsWorldInfo() {
         result.entries[String(i)] = {
             uid: i, key: e.key || [], keysecondary: e.keysecondary || [],
             comment: exportComment, content: exportContent,
-            constant: !!e.constant, selective: !!e.selective, selectiveLogic: 0,
+            // Persist the category as an extra field. SillyTavern ignores unknown
+            // World Info keys, but this tool reads it back first on re-import, so the
+            // category no longer gets lost / reset to "Supplementary" on a round-trip.
+            category: e.category || 'Supplementary',
+            constant: !!e.constant, selective: !!e.selective,
+            selectiveLogic: (e.selectiveLogic !== undefined && e.selectiveLogic !== null) ? e.selectiveLogic : 0,
             addMemo: true, order: e.order || 100, position: e.position || 0,
             disable: !!e.disable, probability: e.probability || 100, useProbability: true,
-            depth: e.depth || 4, sticky: 0, vectorized: false, ignoreBudget: false,
-            excludeRecursion: false,
-            preventRecursion: (e.category === 'Core Rule' || e.category === 'Core Concept'),
+            depth: e.depth || 4, sticky: e.sticky || 0, vectorized: false, ignoreBudget: false,
+            excludeRecursion: !!e.excludeRecursion,
+            // Was derived from category. Now a real field: the auditor sets it by
+            // entry SIZE, because it is large entries that pull half the book in
+            // behind them via recursive scanning.
+            preventRecursion: !!e.preventRecursion,
             displayIndex: i, matchPersonaDescription: false, matchCharacterDescription: false,
             matchCharacterPersonality: false, matchCharacterDepthPrompt: false,
             matchScenario: false, matchCreatorNotes: false, delayUntilRecursion: 0,
-            outletName: '', group: '', groupOverride: false, groupWeight: 100,
-            scanDepth: null, caseSensitive: null, matchWholeWords: null,
-            useGroupScoring: null, automationId: '',
+            outletName: '', group: e.group || '', groupOverride: false,
+            groupWeight: e.groupWeight || 100,
+            scanDepth: null, caseSensitive: null,
+            matchWholeWords: (e.matchWholeWords === true || e.matchWholeWords === false) ? e.matchWholeWords : null,
+            useGroupScoring: (e.useGroupScoring === true) ? true : null, automationId: '',
             role: e.position === 4 ? 0 : null,
-            cooldown: null, delay: null, triggers: [],
+            cooldown: e.cooldown || null, delay: null, triggers: [],
             characterFilter: { isExclude: false, names: [], tags: [] }
         };
     }
     return result;
+}
+
+function readFileAsText(file) {
+    return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function (ev) { resolve(ev.target.result); };
+        reader.onerror = function () { reject(new Error('Failed to read file: ' + (file && file.name))); };
+        reader.readAsText(file);
+    });
 }
 
 function downloadJSON(data, filename) {
@@ -1291,6 +2503,7 @@ function buildPanel() {
     h += '<button class="menu_button" id="lbc-f-expand" style="display:none"><i class="fa-solid fa-layer-group"></i> ' + esc(T('expand')) + '</button>';
     h += '<div class="lbc-footer-spacer"></div>';
     h += '<button class="menu_button" id="lbc-f-loadbook"><i class="fa-solid fa-folder-open"></i> ' + esc(T('loadBook')) + '</button>';
+    h += '<button class="menu_button" id="lbc-f-merge"><i class="fa-solid fa-code-merge"></i> ' + esc(T('merge')) + '</button>';
     h += '<button class="menu_button" id="lbc-f-template"><i class="fa-solid fa-upload"></i> ' + esc(T('template')) + '</button>';
     h += '<button class="menu_button lbc-btn-warning" id="lbc-f-export"><i class="fa-solid fa-download"></i> ' + esc(T('exportJSON')) + '</button>';
     h += '<button class="menu_button lbc-btn-success" id="lbc-f-import"><i class="fa-solid fa-file-import"></i> ' + esc(T('importST')) + '</button>';
@@ -1317,6 +2530,7 @@ function applyPanelPosition() {
 }
 
 function bindPanelEvents() {
+    lbcBindOptimizerEvents();
     $(document).on('click', '#lbc-panel-overlay, #lbc-h-close', function () { togglePanel(false); });
     $(document).on('keydown', function (e) { if (e.key === 'Escape' && $('#lbc-panel').hasClass('lbc-open')) togglePanel(false); });
 
@@ -1340,11 +2554,13 @@ function bindPanelEvents() {
     $(document).on('click', '#lbc-f-import', doUIImport);
     $(document).on('click', '#lbc-f-template', function () { $('#lbc-file-template').trigger('click'); });
     $(document).on('click', '#lbc-f-loadbook', function () { $('#lbc-file-loadbook').trigger('click'); });
+    $(document).on('click', '#lbc-f-merge', function () { lbcShowMergeModal(); });
     $(document).on('click', '#lbc-h-reset', function () {
         if (!confirm(T('resetConfirm'))) return;
         resetData(); renderBody(); showStatus(T('resetDone'), 'info');
     });
     $(document).on('click', '#lbc-h-tr', doTranslateToggle);
+    $(document).on('click', '#lbc-tr-idea', doTranslateIdea);
 
     $(document).on('change', '#lbc-file-template', function () {
         var file = this.files[0]; if (!file) return;
@@ -1405,6 +2621,7 @@ function bindPanelEvents() {
         };
         reader.readAsText(file); this.value = '';
     });
+
     $(document).on('click', '.lbc-gen-field-btn', async function () {
         if (lbcBusy) return;
         var key = $(this).data('field'), label = $(this).data('label');
@@ -1423,6 +2640,21 @@ function bindPanelEvents() {
             var res = await doReconstructWorld();
             renderBody();
             showStatus(res.applied + ' ' + T('reconstructDone'), 'success');
+        } catch (e) { showStatus(e.message, 'error'); }
+        lbcBusy = false;
+    });
+
+    $(document).on('click', '.lbc-autocat-btn', async function () {
+        if (lbcBusy) return;
+        if (!confirm(T('autoCategorizeConfirm'))) return;
+        lbcBusy = true;
+        $(this).html('<i class="fa-solid fa-circle-notch fa-spin"></i> ' + esc(T('autoCategorize')));
+        showStatus(T('autoCategorizing'), 'info');
+        try {
+            var res = await doAutoCategorize();
+            renderBody();
+            if (res.changed > 0) showStatus(res.changed + ' / ' + res.total + ' ' + T('autoCategorizeDone'), 'success');
+            else showStatus(T('autoCategorizeNoChange'), 'success');
         } catch (e) { showStatus(e.message, 'error'); }
         lbcBusy = false;
     });
@@ -1580,7 +2812,59 @@ function bindPanelEvents() {
 
     $(document).on('click', '.lbc-entry-edit', function (ev) {
         ev.stopPropagation();
-        lbcData.editingEntryIdx = parseInt($(this).data('idx')); renderBody();
+        lbcData.editingEntryIdx = parseInt($(this).data('idx'));
+        lbcData._edParents = [];               /* parents are a per-session choice */
+        renderBody();
+    });
+
+    /* ── v1.10: LLM Edit ── */
+    $(document).on('click', '#lbc-editor-llmedit', function () {
+        var idx = lbcData.editingEntryIdx;
+        if (idx < 0) return;
+        saveEntryEditor();
+        lbcShowLLMEditModal(idx);
+    });
+
+    /* ── v1.9: blank entry ── */
+    $(document).on('click', '.lbc-add-blank', function () {
+        if (lbcBusy) return;
+        addBlankEntry('Concept');
+    });
+
+    /* ── v1.9: parent selection + generate-from-parents ── */
+    $(document).on('change', '#lbc-ed-parent-add', function () {
+        var v = parseInt($(this).val());
+        if (isNaN(v)) return;
+        /* keep the user's typed values across the re-render */
+        saveEntryEditor();
+        lbcData._edParents = lbcData._edParents || [];
+        if (lbcData._edParents.indexOf(v) === -1) lbcData._edParents.push(v);
+        renderBody();
+    });
+
+    $(document).on('click', '.lbc-parent-x', function (ev) {
+        ev.stopPropagation();
+        saveEntryEditor();
+        var v = parseInt($(this).data('pidx'));
+        lbcData._edParents = (lbcData._edParents || []).filter(function (i) { return i !== v; });
+        renderBody();
+    });
+
+    $(document).on('click', '#lbc-ed-gen-parents', async function () {
+        if (lbcBusy) return;
+        var idx = lbcData.editingEntryIdx;
+        if (idx < 0) return;
+        lbcBusy = true;
+        var $btn = $(this).prop('disabled', true).html('<i class="fa-solid fa-circle-notch fa-spin"></i> ' + esc(T('generating')));
+        try {
+            await doGenerateFromParents(idx);
+            renderBody();
+            showStatus(T('parentsGenerated'), 'success');
+        } catch (e) {
+            showStatus(e.message, 'error');
+            $btn.prop('disabled', false).html('🧬 ' + esc(T('genFromParents')));
+        }
+        lbcBusy = false;
     });
 
     $(document).on('click', '.lbc-entry-card-header', function () {
@@ -1665,7 +2949,7 @@ function resetData() {
         if (k === 'entries') lbcData.entries = [];
         else if (k === 'locked') lbcData.locked = {};
         else if (k === 'worldScale') lbcData.worldScale = 3;
-        else if (k === 'editingEntryIdx') lbcData.editingEntryIdx = -1;
+        else if (k === 'editingEntryIdx') { lbcData.editingEntryIdx = -1; lbcData._edParents = []; }
         else if (k === 'categoryFilter') lbcData.categoryFilter = 'all';
         else if (k === 'templateData') lbcData[k] = null;
         else if (typeof lbcData[k] === 'string') lbcData[k] = '';
@@ -1713,6 +2997,37 @@ function syncTrBtn() {
     else $b.removeClass('lbc-btn-tr-active').html('<i class="fa-solid fa-language"></i>');
 }
 
+/* Translate the Simple-mode idea text INTO English (source auto-detected).
+   This is the reverse of the UI/content translation: it lets a user write the
+   idea in their own language, then hand the LLM an English prompt so every
+   generated field comes back in clean English. */
+async function doTranslateIdea() {
+    if (lbcBusy) return;
+    if (!translateFn) {
+        showStatus(T('translateNA'), 'error');
+        if (typeof toastr !== 'undefined') toastr.warning(T('translateNA'));
+        return;
+    }
+    var $ta = $('#lbc-body').find('textarea[data-key="simpleIdea"]');
+    var idea = (($ta.length ? $ta.val() : lbcData.simpleIdea) || '').toString();
+    if (!idea.trim()) { showStatus(T('ideaEmpty'), 'error'); return; }
+    lbcBusy = true;
+    $('#lbc-tr-idea').addClass('lbc-generating')
+        .html('<i class="fa-solid fa-circle-notch fa-spin"></i> ' + esc(T('translatingIdea')));
+    showStatus(T('translatingIdea'), 'info');
+    try {
+        var out = await translateFn(idea, 'en');
+        lbcData.simpleIdea = (out === undefined || out === null) ? idea : String(out);
+        showStatus(T('ideaTranslated'), 'success');
+    } catch (e) {
+        showStatus(e.message || String(e), 'error');
+        if (typeof toastr !== 'undefined') toastr.error(e.message || String(e));
+    } finally {
+        lbcBusy = false;
+        renderBody();
+    }
+}
+
 function renderFullUI() {
     $('#lbc-title-text').text(T('title'));
     $('.lbc-mode-btn[data-mode="simple"]').html('✨ ' + esc(T('simple')));
@@ -1726,6 +3041,7 @@ function renderFullUI() {
     $('#lbc-f-generate').html('<i class="fa-solid fa-wand-magic-sparkles"></i> ' + esc(T('generate')));
     $('#lbc-f-expand').html('<i class="fa-solid fa-layer-group"></i> ' + esc(T('expand')));
     $('#lbc-f-template').html('<i class="fa-solid fa-upload"></i> ' + esc(T('template')));
+    $('#lbc-f-merge').html('<i class="fa-solid fa-code-merge"></i> ' + esc(T('merge')));
     $('#lbc-f-export').html('<i class="fa-solid fa-download"></i> ' + esc(T('exportJSON')));
     $('#lbc-f-import').html('<i class="fa-solid fa-file-import"></i> ' + esc(T('importST')));
     syncTrBtn();
@@ -1816,7 +3132,12 @@ function renderBody() {
 
 function renderSimple($b) {
     var h = '';
-    h += '<div class="lbc-section-title">💡 ' + esc(T('describeWorld')) + '</div>';
+    h += '<div class="lbc-section-title">💡 ' + esc(T('describeWorld'));
+    if (translateFn) {
+        h += '<span class="lbc-tr-idea" id="lbc-tr-idea" title="' + esc(T('translateIdeaHint')) + '">' +
+            '<i class="fa-solid fa-language"></i> ' + esc(T('translateIdea')) + '</span>';
+    }
+    h += '</div>';
     h += '<textarea class="lbc-textarea lbc-simple-idea lbc-data-input" data-key="simpleIdea" rows="6" placeholder="' + esc(T('ideaPlaceholder')) + '">' + esc(lbcData.simpleIdea) + '</textarea>';
     if (lbcData.templateData) {
         h += '<div class="lbc-template-info"><strong>📋 ' + esc(T('templateLoaded')) + ':</strong> ' + esc(lbcData.templateName) +
@@ -1927,6 +3248,9 @@ function renderEntries($b) {
         h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
         h += renderEntriesStats();
         h += '<button class="menu_button lbc-reconstruct-btn" style="font-size:11px!important;padding:5px 12px!important;border-radius:7px!important;white-space:nowrap" title="' + esc(T('reconstructConfirm')) + '"><i class="fa-solid fa-wand-sparkles"></i> ' + esc(T('reconstructFields')) + '</button>';
+        h += '<button class="menu_button lbc-autocat-btn" style="font-size:11px!important;padding:5px 12px!important;border-radius:7px!important;white-space:nowrap" title="' + esc(T('autoCategorizeConfirm')) + '"><i class="fa-solid fa-tags"></i> ' + esc(T('autoCategorize')) + '</button>';
+        h += '<button class="menu_button lbc-audit-btn" style="font-size:11px!important;padding:5px 12px!important;border-radius:7px!important;white-space:nowrap" title="' + esc(T('optAuditHint')) + '"><i class="fa-solid fa-stethoscope"></i> ' + esc(T('audit')) + '</button>';
+        h += '<button class="menu_button lbc-optimize-btn" style="font-size:11px!important;padding:5px 12px!important;border-radius:7px!important;white-space:nowrap" title="' + esc(T('optOptimizeHint')) + '"><i class="fa-solid fa-bolt"></i> ' + esc(T('optimize')) + '</button>';
         h += '</div>';
         h += '<div class="lbc-cat-chips">';
         h += '<div class="lbc-cat-chip' + (lbcData.categoryFilter === 'all' ? ' active' : '') + '" data-cat="all">' + esc(T('allCat')) + '</div>';
@@ -1963,6 +3287,9 @@ function renderEntries($b) {
     }
     h += '<button class="menu_button lbc-add-entry-custom" title="' + esc(T('customCatPrompt')) +
         '" style="font-size:10px!important;padding:3px 8px!important;border-radius:6px!important;border-style:dashed!important;opacity:.85">' + esc(T('customCat')) + '</button>';
+    h += '<button class="menu_button lbc-add-blank" title="' + esc(T('blankEntryHint')) +
+        '" style="font-size:10px!important;padding:3px 8px!important;border-radius:6px!important;border-style:dashed!important;' +
+        'color:rgba(120,200,150,.95)!important;border-color:rgba(120,200,150,.4)!important">✏️ ' + esc(T('blankEntry')) + '</button>';
     h += '</div>';
     $b.html(h);
 }
@@ -2041,6 +3368,7 @@ function renderEntryEditor($b) {
     var h = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">';
     h += '<button class="menu_button" id="lbc-editor-back"><i class="fa-solid fa-arrow-left"></i> ' + esc(T('back')) + '</button>';
     h += '<div class="lbc-section-title" style="margin:0;flex:1">✏️ ' + esc(T('editEntry')) + ' #' + (idx + 1) + '</div>';
+    h += '<button class="menu_button" id="lbc-editor-llmedit" title="' + esc(T('llmEditHint')) + '">✒️ ' + esc(T('llmEdit')) + '</button>';
     h += '<button class="menu_button lbc-btn-warning" id="lbc-editor-enhance" title="' + esc(T('enhanceEntry')) + '">✨ ' + esc(T('enhanceEntry')) + '</button>';
     h += '<button class="menu_button lbc-btn-success" id="lbc-editor-save"><i class="fa-solid fa-check"></i> ' + esc(T('save')) + '</button>';
     h += '</div>';
@@ -2075,6 +3403,36 @@ function renderEntryEditor($b) {
 
     h += '<div class="lbc-field"><div class="lbc-field-label">' + esc(T('secondaryKeys')) + '</div>';
     h += '<input class="lbc-input" id="lbc-ed-keys2" value="' + esc((e.keysecondary || []).join(', ')) + '"></div>';
+
+    /* ── v1.9: Parent Entries — the new content is grown from these ── */
+    h += '<div class="lbc-field"><div class="lbc-field-label" title="' + esc(T('parentEntriesHint')) + '">🧬 ' + esc(T('parentEntries')) + '</div>';
+    h += '<div class="lbc-parent-chips" id="lbc-ed-parents">';
+    var pIdxs = (lbcData._edParents || []).filter(function (i) { return i >= 0 && i < lbcData.entries.length && i !== idx; });
+    for (var pi = 0; pi < pIdxs.length; pi++) {
+        var pe = lbcData.entries[pIdxs[pi]];
+        h += '<span class="lbc-parent-chip" data-pidx="' + pIdxs[pi] + '">'
+            + esc(pe.comment || 'Untitled') + ' <span class="lbc-parent-x" data-pidx="' + pIdxs[pi] + '">×</span></span>';
+    }
+    var others = [];
+    for (var oi = 0; oi < lbcData.entries.length; oi++) {
+        if (oi === idx || pIdxs.indexOf(oi) >= 0) continue;
+        others.push(oi);
+    }
+    if (others.length) {
+        h += '<select class="lbc-select lbc-parent-add" id="lbc-ed-parent-add" style="width:auto;min-width:140px;font-size:11px!important">';
+        h += '<option value="">' + esc(T('addParent')) + '</option>';
+        for (var oj = 0; oj < others.length; oj++) {
+            var oe = lbcData.entries[others[oj]];
+            h += '<option value="' + others[oj] + '">#' + (others[oj] + 1) + ' ' + esc((oe.comment || 'Untitled').slice(0, 40)) + ' [' + esc(oe.category || '?') + ']</option>';
+        }
+        h += '</select>';
+    } else if (!pIdxs.length) {
+        h += '<span style="font-size:11px;opacity:.4">' + esc(T('noOtherEntries')) + '</span>';
+    }
+    if (pIdxs.length) {
+        h += '<button class="menu_button lbc-btn-success" id="lbc-ed-gen-parents" style="font-size:11px!important;padding:4px 10px!important;border-radius:7px!important">🧬 ' + esc(T('genFromParents')) + '</button>';
+    }
+    h += '</div></div>';
 
     h += '<div class="lbc-field"><div class="lbc-field-label">' + esc(T('content')) + '</div>';
     h += '<textarea class="lbc-textarea" id="lbc-ed-content" rows="12">' + esc(e.content || '') + '</textarea></div>';
@@ -2186,4 +3544,873 @@ function buildSettingsPanel() {
     $('#lbc-s-btn').prop('checked', lbcSettings.showButton).on('change', function () { lbcSettings.showButton = this.checked; saveSett(); syncBtn(); });
     $('#lbc-s-pos').val(lbcSettings.panelPosition).on('change', function () { lbcSettings.panelPosition = this.value; saveSett(); applyPanelPosition(); });
     $('#lbc-s-open').on('click', function () { togglePanel(true); });
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   LOREBOOK OPTIMIZER  (LBC v1.7.0)
+
+   Two-stage design:
+     Stage 1 — lbcAudit()      pure JS, no LLM. Finds every mechanical defect
+                               and computes real token cost. Instant, free,
+                               deterministic, cannot hallucinate.
+     Stage 2 — lbcLLMOptimize() LLM pass, but ONLY for judgment calls:
+                               replacement keys, semantic duplicates,
+                               canon contradictions. Sends a compact digest,
+                               never the full book.
+     Stage 3 — diff modal, user picks what to apply.
+
+   Append this whole block to index.js (before the final closing lines).
+   Requires the entry-model widening described in the integration notes.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Token estimation ──────────────────────────────────────────────────
+   Cheap but calibrated: Latin ≈ 4 chars/token, Cyrillic/CJK ≈ 2.2.
+   Good enough to reason about a 4k budget; we never need exactness. */
+function lbcEstTokens(str) {
+    if (!str) return 0;
+    var s = String(str);
+    var nonAscii = (s.match(/[^\x00-\x7F]/g) || []).length;
+    var ascii = s.length - nonAscii;
+    return Math.ceil(ascii / 4 + nonAscii / 2.2);
+}
+
+function lbcEntryTokens(e) {
+    return lbcEstTokens((e._origContent || e.content || '')) + lbcEstTokens(e.comment || '') + 8;
+}
+
+/* ── Category → order tier ────────────────────────────────────────────
+   The ladder that replaces ad-hoc order values. Higher = higher priority
+   = survives budget truncation. Within a tier we keep relative order. */
+var LBC_ORDER_TIERS = {
+    'Core Rule': 1000,
+    'Core Concept': 940,
+    'Creature / Species': 880,
+    'Magic / Technology': 820,
+    'Culture / Custom': 740,
+    'Faction': 660,
+    'Organization': 650,
+    'Location': 560,
+    'Character': 460,
+    'Lore / Legend': 400,
+    'Event / History': 350,
+    'Item / Artifact': 260,
+    'RP Prompt': 120,
+    'Supplementary': 100
+};
+var LBC_TIER_STEP = 10;   // spacing between entries inside one tier
+
+/* Keys that are too common to be safe triggers. A key here fires on
+   ordinary prose and drags its whole entry into every prompt. */
+var LBC_GENERIC_KEYS = [
+    'man','men','woman','women','human','humans','people','person','society','world',
+    'city','town','house','home','room','door','food','water','fire','light','dark',
+    'time','life','death','love','hate','fear','war','peace','power','god','magic',
+    'name','work','game','body','sex','group','new','old','big','small','the','and',
+    'club','bar','size','growth','drug','sport','device','measure','scanner','history',
+    'prompt','event','item','thing','place','area','system','rule','law','order'
+];
+
+/* Tunables. Exposed so they can live in settings later. */
+var LBC_OPT = {
+    bigEntryTokens: 700,      // above this → preventRecursion, needs gating
+    collisionTokenAlarm: 800, // one keyword pulling more than this = alarm
+    shortKeyLen: 4,           // keys this short get matchWholeWords
+    constantBudget: 1200,     // always-on tokens we consider acceptable
+    dupeKeyOverlap: 0.6       // ≥60% shared keys = suspected duplicate pair
+};
+
+
+/* ══════════════════════════════════════
+   STAGE 1 — DETERMINISTIC AUDIT
+   ══════════════════════════════════════ */
+
+function lbcAudit() {
+    var entries = lbcData.entries || [];
+    var issues = [];
+    var i, j, k;
+
+    var add = function (sev, type, idx, msg, fix) {
+        issues.push({ sev: sev, type: type, idx: (idx === undefined ? null : idx), msg: msg, fix: fix || null });
+    };
+
+    /* ── token accounting ── */
+    var total = 0, constTok = 0;
+    for (i = 0; i < entries.length; i++) {
+        var t = lbcEntryTokens(entries[i]);
+        total += t;
+        if (entries[i].constant) constTok += t;
+    }
+
+    if (constTok > LBC_OPT.constantBudget) {
+        add('warn', 'constant_bloat', null,
+            constTok + ' tokens are ALWAYS in the prompt (' + entries.filter(function (e) { return e.constant; }).length +
+            ' constant entries). Budget guideline: ' + LBC_OPT.constantBudget + '.', null);
+    }
+
+    /* ── build global key index ── */
+    var keyIndex = {};   // lowercased key -> [entry idx]
+    for (i = 0; i < entries.length; i++) {
+        if (entries[i].constant) continue;            // constant ignores keys entirely
+        var seen = {};
+        var keys = entries[i].key || [];
+        for (j = 0; j < keys.length; j++) {
+            var lk = String(keys[j]).trim().toLowerCase();
+            if (!lk) continue;
+            if (seen[lk]) {
+                add('info', 'dupe_key_self', i, 'Key "' + lk + '" is listed twice in the same entry.', { op: 'dedupe_self' });
+                continue;
+            }
+            seen[lk] = 1;
+            (keyIndex[lk] = keyIndex[lk] || []).push(i);
+        }
+    }
+
+    /* ── key collisions: the #1 killer ── */
+    for (k in keyIndex) {
+        if (keyIndex[k].length < 2) continue;
+        var owners = keyIndex[k];
+        var cost = 0;
+        for (i = 0; i < owners.length; i++) cost += lbcEntryTokens(entries[owners[i]]);
+
+        // Entries deliberately placed in the same inclusion group are allowed to share keys.
+        var groups = owners.map(function (o) { return entries[o].group || ''; });
+        var sameGroup = groups[0] && groups.every(function (g) { return g === groups[0]; });
+        if (sameGroup) continue;
+
+        add(cost >= LBC_OPT.collisionTokenAlarm ? 'error' : 'warn', 'key_collision', null,
+            'Key "' + k + '" fires ' + owners.length + ' entries at once (~' + cost + ' tok): ' +
+            owners.map(function (o) { return '#' + o + ' ' + (entries[o].comment || ''); }).join(' | '),
+            { op: 'deconflict', key: k, owners: owners });
+    }
+
+    /* ── per-entry checks ── */
+    for (i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        var tok = lbcEntryTokens(e);
+        var keys2 = (e.key || []).filter(function (x) { return String(x).trim(); });
+
+        // never fires
+        if (!e.constant && keys2.length === 0) {
+            add('error', 'no_keys', i, '"' + (e.comment || '?') + '" is not constant and has no keys — it can NEVER activate.', null);
+        }
+
+        // dead secondary keys: the single most common silent bug
+        if ((e.keysecondary || []).length && !e.selective) {
+            add('error', 'dead_secondary', i,
+                '"' + (e.comment || '?') + '" has ' + e.keysecondary.length +
+                ' secondary keys but selective=false — SillyTavern ignores them completely.',
+                { op: 'enable_selective' });
+        }
+
+        // selective with nothing to select on
+        if (e.selective && !(e.keysecondary || []).length) {
+            add('warn', 'empty_selective', i,
+                '"' + (e.comment || '?') + '" is selective but has no secondary keys — the flag does nothing.',
+                { op: 'disable_selective' });
+        }
+
+        // big entry with no recursion guard → drags half the book in behind it
+        if (tok >= LBC_OPT.bigEntryTokens && !e.preventRecursion) {
+            add('warn', 'token_bomb', i,
+                '"' + (e.comment || '?') + '" is ~' + tok + ' tok with preventRecursion=false — its text will recursively trigger other entries.',
+                { op: 'prevent_recursion' });
+        }
+
+        // big entry with wide-open keys → should be gated behind selective
+        if (tok >= LBC_OPT.bigEntryTokens && !e.selective && keys2.length > 6) {
+            add('warn', 'ungated_bomb', i,
+                '"' + (e.comment || '?') + '" is ~' + tok + ' tok with ' + keys2.length +
+                ' broad keys. Consider selective + secondary keys as a gate.', null);
+        }
+
+        // generic / short keys
+        for (j = 0; j < keys2.length; j++) {
+            var kk = String(keys2[j]).trim().toLowerCase();
+            if (LBC_GENERIC_KEYS.indexOf(kk) !== -1) {
+                add('warn', 'generic_key', i,
+                    'Key "' + kk + '" on "' + (e.comment || '?') + '" is a common word — it will misfire in ordinary prose.',
+                    { op: 'llm_rekey', key: kk });
+            } else if (kk.length <= LBC_OPT.shortKeyLen && e.matchWholeWords !== true) {
+                add('info', 'short_key', i,
+                    'Key "' + kk + '" is short — enable matchWholeWords or it matches inside other words.',
+                    { op: 'whole_words' });
+            }
+        }
+
+        // position/depth mismatch
+        if (e.position !== 4 && e.depth && e.depth !== 4) {
+            add('info', 'dead_depth', i, '"' + (e.comment || '?') + '": depth only applies to position 4 (@D).', null);
+        }
+    }
+
+    /* ── suspected duplicate pairs (key-overlap heuristic; LLM confirms) ── */
+    for (i = 0; i < entries.length; i++) {
+        for (j = i + 1; j < entries.length; j++) {
+            var a = (entries[i].key || []).map(function (x) { return String(x).toLowerCase(); });
+            var b = (entries[j].key || []).map(function (x) { return String(x).toLowerCase(); });
+            if (a.length < 2 || b.length < 2) continue;
+            var shared = a.filter(function (x) { return b.indexOf(x) !== -1; }).length;
+            var ratio = shared / Math.min(a.length, b.length);
+            if (ratio >= LBC_OPT.dupeKeyOverlap && !(entries[i].group && entries[i].group === entries[j].group)) {
+                add('error', 'suspected_dupe', i,
+                    'DUPLICATE? #' + i + ' "' + entries[i].comment + '" and #' + j + ' "' + entries[j].comment +
+                    '" share ' + Math.round(ratio * 100) + '% of their keys — both will always fire together.',
+                    { op: 'group', pair: [i, j] });
+            }
+        }
+    }
+
+    /* ── order sanity ── */
+    var orderBuckets = {};
+    for (i = 0; i < entries.length; i++) {
+        var o = entries[i].order || 100;
+        (orderBuckets[o] = orderBuckets[o] || []).push(i);
+    }
+    for (k in orderBuckets) {
+        if (orderBuckets[k].length >= 4) {
+            add('warn', 'order_pileup', null,
+                orderBuckets[k].length + ' entries all sit at order=' + k +
+                ' — their priority under budget pressure is effectively random.',
+                { op: 'reorder' });
+            break;
+        }
+    }
+
+    var sevRank = { error: 0, warn: 1, info: 2 };
+    issues.sort(function (x, y) { return sevRank[x.sev] - sevRank[y.sev]; });
+
+    return {
+        issues: issues,
+        stats: {
+            entries: entries.length,
+            totalTokens: total,
+            constantTokens: constTok,
+            errors: issues.filter(function (x) { return x.sev === 'error'; }).length,
+            warns: issues.filter(function (x) { return x.sev === 'warn'; }).length,
+            infos: issues.filter(function (x) { return x.sev === 'info'; }).length
+        }
+    };
+}
+
+
+/* ══════════════════════════════════════
+   STAGE 1b — SAFE AUTO-FIX (no LLM)
+   Everything here is mechanically correct and reversible.
+   ══════════════════════════════════════ */
+
+function lbcAutoFix(opts) {
+    opts = opts || {};
+    var entries = lbcData.entries || [];
+    var log = [];
+    var i, j;
+
+    /* 1. Rebuild the order ladder from categories, preserving in-tier order. */
+    if (opts.reorder !== false) {
+        var byCat = {};
+        for (i = 0; i < entries.length; i++) {
+            var c = entries[i].category || 'Supplementary';
+            (byCat[c] = byCat[c] || []).push(i);
+        }
+        for (var cat in byCat) {
+            var base = LBC_ORDER_TIERS[cat];
+            if (base === undefined) base = 300;               // unknown custom category
+            var list = byCat[cat];
+            // keep the author's existing relative ranking inside the tier
+            list.sort(function (x, y) { return (entries[y].order || 100) - (entries[x].order || 100); });
+            for (j = 0; j < list.length; j++) {
+                var newOrder = base - j * LBC_TIER_STEP;
+                if (newOrder < 10) newOrder = 10;
+                if (entries[list[j]].order !== newOrder) {
+                    entries[list[j]].order = newOrder;
+                    log.push('#' + list[j] + ' order → ' + newOrder);
+                }
+            }
+        }
+    }
+
+    /* 2. Repair selective / keysecondary coherence. */
+    if (opts.selective !== false) {
+        for (i = 0; i < entries.length; i++) {
+            var e = entries[i];
+            if ((e.keysecondary || []).length && !e.selective) {
+                e.selective = true;
+                if (e.selectiveLogic === undefined || e.selectiveLogic === null) e.selectiveLogic = 0; // AND_ANY
+                log.push('#' + i + ' selective → true (revives ' + e.keysecondary.length + ' secondary keys)');
+            } else if (e.selective && !(e.keysecondary || []).length) {
+                e.selective = false;
+                log.push('#' + i + ' selective → false (no secondary keys to gate on)');
+            }
+        }
+    }
+
+    /* 3. preventRecursion on heavy entries. */
+    if (opts.recursion !== false) {
+        for (i = 0; i < entries.length; i++) {
+            if (lbcEntryTokens(entries[i]) >= LBC_OPT.bigEntryTokens && !entries[i].preventRecursion) {
+                entries[i].preventRecursion = true;
+                log.push('#' + i + ' preventRecursion → true');
+            }
+        }
+    }
+
+    /* 4. matchWholeWords for short keys. */
+    if (opts.wholeWords !== false) {
+        for (i = 0; i < entries.length; i++) {
+            var hasShort = (entries[i].key || []).some(function (x) {
+                return String(x).trim().length <= LBC_OPT.shortKeyLen;
+            });
+            if (hasShort && entries[i].matchWholeWords !== true) {
+                entries[i].matchWholeWords = true;
+                log.push('#' + i + ' matchWholeWords → true');
+            }
+        }
+    }
+
+    /* 5. Drop duplicate keys within a single entry. */
+    if (opts.dedupeKeys !== false) {
+        for (i = 0; i < entries.length; i++) {
+            var seen = {}, out = [], keys = entries[i].key || [];
+            for (j = 0; j < keys.length; j++) {
+                var lk = String(keys[j]).trim();
+                if (!lk) continue;
+                if (seen[lk.toLowerCase()]) continue;
+                seen[lk.toLowerCase()] = 1;
+                out.push(lk);
+            }
+            if (out.length !== keys.length) {
+                entries[i].key = out;
+                log.push('#' + i + ' removed ' + (keys.length - out.length) + ' duplicate key(s)');
+            }
+        }
+    }
+
+    /* 6. Auto-group exact duplicate pairs so only one fires per generation. */
+    if (opts.group !== false) {
+        var audit = lbcAudit();
+        var gid = 1;
+        audit.issues.forEach(function (iss) {
+            if (iss.type !== 'suspected_dupe' || !iss.fix || !iss.fix.pair) return;
+            var p = iss.fix.pair;
+            if (entries[p[0]].group || entries[p[1]].group) return;
+            var name = 'auto_dupe_' + (gid++);
+            entries[p[0]].group = name;
+            entries[p[1]].group = name;
+            entries[p[0]].useGroupScoring = true;
+            entries[p[1]].useGroupScoring = true;
+            log.push('#' + p[0] + ' + #' + p[1] + ' → inclusion group "' + name + '" (only one fires)');
+        });
+    }
+
+    saveSett();
+    return log;
+}
+
+
+/* ══════════════════════════════════════
+   STAGE 2 — LLM PASS (judgment only)
+   ══════════════════════════════════════ */
+
+PROMPTS.optimizeKeys =
+    '[OOC: You are a SillyTavern World Info / LoreBook OPTIMIZER. You are not writing lore. ' +
+    'You are fixing keyword targeting so entries fire at the right time and stop blowing the token budget.\n' +
+    'CRITICAL: IGNORE any user persona or chat character. Work ONLY on the data below.\n\n' +
+    'HOW SILLYTAVERN ACTIVATION WORKS:\n' +
+    '- An entry activates when any "key" appears in recent chat. A common word (e.g. "man", "club", "size") ' +
+    'therefore fires constantly and wastes the budget.\n' +
+    '- If selective=true, the entry needs a PRIMARY key AND a SECONDARY key present. This is the correct way to gate a large entry.\n' +
+    '- Two entries sharing a key always fire together. That is only acceptable if they are in the same inclusion group.\n\n' +
+    'RULES:\n' +
+    '1. Replace over-generic keys with distinctive, multi-word ones ("cum bath club", not "club").\n' +
+    '2. When several entries collide on one key, decide which ONE entry owns it (the most canonical/definitional one) ' +
+    'and give the others narrower keys. Never leave the collision.\n' +
+    '3. For any entry marked LARGE, propose selective=true plus 5-10 secondary keys that describe the SITUATION ' +
+    'in which that entry is actually needed.\n' +
+    '4. Keys must be words that would plausibly be typed in roleplay prose. No meta-jargon.\n' +
+    '5. Keep keys in the SAME LANGUAGE as the entry content.\n' +
+    '6. Do not invent new entries. Do not rewrite content. Only keys, keysecondary, selective, group.\n\n' +
+    'DETECTED PROBLEMS:\n{{ISSUES}}\n\n' +
+    'ENTRY DIGEST (index | category | tokens | current keys | opening text):\n{{DIGEST}}\n\n' +
+    'Respond ONLY with valid JSON. Include ONLY entries you are changing:\n' +
+    '{"patches":[{"index":0,"key":["..."],"keysecondary":["..."],"selective":true,"group":"","reason":"one short line"}],' +
+    '"duplicates":[{"a":0,"b":1,"reason":"..."}],' +
+    '"contradictions":[{"entries":[0,1],"issue":"one short line"}]}\n' +
+    'ONLY valid JSON!]';
+
+/* Build a compact digest. We send ~180 chars of each entry, never the full text —
+   that is what keeps a 17k-token lorebook inside a single request. */
+function lbcBuildDigest(indices) {
+    var entries = lbcData.entries;
+    return indices.map(function (i) {
+        var e = entries[i];
+        var tok = lbcEntryTokens(e);
+        var txt = (e._origContent || e.content || '').replace(/\s+/g, ' ').trim().substring(0, 180);
+        return i + ' | ' + (e.category || '?') + ' | ' + tok + 'tok' +
+            (tok >= LBC_OPT.bigEntryTokens ? ' [LARGE]' : '') +
+            (e.constant ? ' [CONSTANT - keys ignored]' : '') +
+            ' | keys: [' + (e.key || []).join(', ') + ']' +
+            ' | sec: [' + (e.keysecondary || []).join(', ') + ']' +
+            ' | ' + txt;
+    }).join('\n');
+}
+
+async function lbcLLMOptimize() {
+    if (!genQuiet) throw new Error(T('noLLM'));
+    if (!lbcData.entries.length) throw new Error(T('noEntriesToOptimize'));
+
+    var audit = lbcAudit();
+
+    // Only entries that actually have a problem worth an LLM opinion on.
+    var relevant = {};
+    audit.issues.forEach(function (iss) {
+        if (['key_collision', 'generic_key', 'ungated_bomb', 'suspected_dupe', 'no_keys'].indexOf(iss.type) === -1) return;
+        if (iss.idx !== null) relevant[iss.idx] = 1;
+        if (iss.fix && iss.fix.owners) iss.fix.owners.forEach(function (o) { relevant[o] = 1; });
+        if (iss.fix && iss.fix.pair) iss.fix.pair.forEach(function (o) { relevant[o] = 1; });
+    });
+    var indices = Object.keys(relevant).map(Number).sort(function (a, b) { return a - b; });
+    if (!indices.length) return { patches: [], duplicates: [], contradictions: [], skipped: true };
+
+    var issueText = audit.issues
+        .filter(function (x) { return x.sev !== 'info'; })
+        .slice(0, 40)
+        .map(function (x) { return '- [' + x.sev + '] ' + x.msg; })
+        .join('\n');
+
+    // Chunk so we never overrun context. Key deconfliction needs global sight,
+    // so every chunk also carries the full key registry.
+    var CHUNK = 18;
+    var allPatches = [], allDupes = [], allContra = [];
+
+    for (var c = 0; c < indices.length; c += CHUNK) {
+        var slice = indices.slice(c, c + CHUNK);
+        var prompt = PROMPTS.optimizeKeys
+            .replace('{{ISSUES}}', issueText || '(none)')
+            .replace('{{DIGEST}}', lbcBuildDigest(slice));
+
+        var raw = await lbcGenQuiet(prompt);
+        var data = parseJSON(raw);
+        if (!data) continue;
+
+        (data.patches || []).forEach(function (p) {
+            var idx = parseInt(p.index);
+            if (isNaN(idx) || idx < 0 || idx >= lbcData.entries.length) return;
+            if (slice.indexOf(idx) === -1) return;   // model wandered outside its chunk
+            allPatches.push(p);
+        });
+        (data.duplicates || []).forEach(function (d) { allDupes.push(d); });
+        (data.contradictions || []).forEach(function (d) { allContra.push(d); });
+    }
+
+    return { patches: allPatches, duplicates: allDupes, contradictions: allContra, audit: audit };
+}
+
+/* Apply only the patches the user ticked. */
+function lbcApplyPatches(patches, selectedIdx) {
+    var applied = 0;
+    for (var i = 0; i < patches.length; i++) {
+        if (selectedIdx && selectedIdx.indexOf(i) === -1) continue;
+        var p = patches[i];
+        var e = lbcData.entries[parseInt(p.index)];
+        if (!e) continue;
+
+        if (Array.isArray(p.key) && p.key.length) e.key = p.key.map(function (s) { return String(s).trim(); }).filter(Boolean);
+        if (Array.isArray(p.keysecondary)) e.keysecondary = p.keysecondary.map(function (s) { return String(s).trim(); }).filter(Boolean);
+        if (typeof p.selective === 'boolean') e.selective = p.selective;
+        if (e.selective && (e.selectiveLogic === undefined || e.selectiveLogic === null)) e.selectiveLogic = 0;
+        if (typeof p.group === 'string' && p.group) { e.group = p.group; e.useGroupScoring = true; }
+        applied++;
+    }
+    saveSett();
+    return applied;
+}
+
+
+/* ══════════════════════════════════════
+   STAGE 3 — REPORT / DIFF MODAL
+   ══════════════════════════════════════ */
+
+var lbcPendingOpt = null;
+
+function lbcRenderOptimizeModal(result, fixLog) {
+    lbcPendingOpt = result;
+    var a = result.audit || lbcAudit();
+    var s = a.stats;
+
+    var h = '<div id="lbc-opt-overlay"></div><div id="lbc-opt-modal">';
+    h += '<div class="lbc-opt-head"><b><i class="fa-solid fa-bolt"></i> ' + esc(T('optimizeTitle')) + '</b>';
+    h += '<button class="menu_button" id="lbc-opt-close"><i class="fa-solid fa-xmark"></i></button></div>';
+
+    h += '<div class="lbc-opt-stats">';
+    h += '<div class="lbc-stat"><span class="lbc-stat-num">' + s.totalTokens + '</span> tok total</div>';
+    h += '<div class="lbc-stat"><span class="lbc-stat-num">' + s.constantTokens + '</span> always-on</div>';
+    h += '<div class="lbc-stat lbc-sev-error"><span class="lbc-stat-num">' + s.errors + '</span> errors</div>';
+    h += '<div class="lbc-stat lbc-sev-warn"><span class="lbc-stat-num">' + s.warns + '</span> warnings</div>';
+    h += '</div>';
+
+    /* Auto-Fix result banner: shown after a fix pass, so the user can see
+       exactly what changed instead of the modal vanishing. */
+    if (fixLog) {
+        if (fixLog.length) {
+            h += '<div class="lbc-opt-section">' + esc(T('optFixLog')) + ' (' + fixLog.length + ')</div>';
+            h += '<div class="lbc-opt-fixlog">';
+            for (var fi = 0; fi < fixLog.length; fi++) h += '<div>' + esc(fixLog[fi]) + '</div>';
+            h += '</div>';
+        } else {
+            h += '<div class="lbc-opt-section">' + esc(T('optFixLog')) + '</div>';
+            h += '<div class="lbc-opt-issues"><div class="lbc-opt-issue">' + esc(T('optNothingToFix')) + '</div></div>';
+        }
+    }
+
+    /* issue list */
+    h += '<div class="lbc-opt-section">' + esc(T('optIssues')) + '</div><div class="lbc-opt-issues">';
+    a.issues.slice(0, 60).forEach(function (iss) {
+        h += '<div class="lbc-opt-issue lbc-sev-' + iss.sev + '">' + esc(iss.msg) + '</div>';
+    });
+    if (!a.issues.length) h += '<div style="opacity:.5;padding:8px">' + esc(T('optClean2')) + '</div>';
+    h += '</div>';
+
+    /* contradictions — content-level, informational only */
+    if (result.contradictions && result.contradictions.length) {
+        h += '<div class="lbc-opt-section">' + esc(T('optContradictions')) + '</div><div class="lbc-opt-issues">';
+        result.contradictions.forEach(function (c) {
+            h += '<div class="lbc-opt-issue lbc-sev-warn">#' + (c.entries || []).join(' ↔ #') + ' — ' + esc(c.issue || '') + '</div>';
+        });
+        h += '</div>';
+    }
+
+    /* patch diff */
+    h += '<div class="lbc-opt-section">' + esc(T('optProposed')) + '</div>';
+    if (!result.patches || !result.patches.length) {
+        // Distinguish "Audit only, LLM was never called" from "LLM ran, found nothing".
+        var needsLLM = a.issues.some(function (x) {
+            return ['key_collision', 'generic_key', 'suspected_dupe', 'no_keys', 'ungated_bomb'].indexOf(x.type) !== -1;
+        });
+        var msg = result.llmRan ? T('optNoPatches') : (needsLLM ? T('optRunOptimize') : T('optNoPatches'));
+        h += '<div style="opacity:.5;padding:8px">' + esc(msg) + '</div>';
+    } else {
+        h += '<div class="lbc-opt-patches">';
+        result.patches.forEach(function (p, pi) {
+            var e = lbcData.entries[parseInt(p.index)];
+            if (!e) return;
+            h += '<label class="lbc-opt-patch"><input type="checkbox" class="lbc-opt-cb" data-pi="' + pi + '" checked>';
+            h += '<div><b>#' + p.index + ' ' + esc(e.comment || '') + '</b>';
+            if (p.reason) h += '<div class="lbc-opt-reason">' + esc(p.reason) + '</div>';
+            if (p.key) {
+                h += '<div class="lbc-opt-diff"><span class="lbc-old">− ' + esc((e.key || []).join(', ')) + '</span>';
+                h += '<span class="lbc-new">+ ' + esc(p.key.join(', ')) + '</span></div>';
+            }
+            if (p.keysecondary && p.keysecondary.length) {
+                h += '<div class="lbc-opt-diff"><span class="lbc-new">+ sec: ' + esc(p.keysecondary.join(', ')) + '</span></div>';
+            }
+            if (typeof p.selective === 'boolean' && p.selective !== e.selective) {
+                h += '<div class="lbc-opt-diff"><span class="lbc-new">+ selective: ' + p.selective + '</span></div>';
+            }
+            h += '</div></label>';
+        });
+        h += '</div>';
+    }
+
+    h += '<div class="lbc-opt-foot">';
+    // Auto-Fix is pointless once the mechanical issues are gone.
+    var fixable = a.issues.some(function (x) {
+        return ['dead_secondary', 'empty_selective', 'token_bomb', 'short_key',
+                'dupe_key_self', 'order_pileup', 'suspected_dupe'].indexOf(x.type) !== -1;
+    });
+    if (fixable) {
+        h += '<button class="menu_button" id="lbc-opt-autofix"><i class="fa-solid fa-screwdriver-wrench"></i> ' + esc(T('optAutoFix')) + '</button>';
+    }
+    // Offer the LLM pass straight from the modal when only judgment calls remain.
+    if (!result.llmRan && !fixable && a.issues.length) {
+        h += '<button class="menu_button lbc-optimize-btn"><i class="fa-solid fa-bolt"></i> ' + esc(T('optimize')) + '</button>';
+    }
+    h += '<div style="flex:1"></div>';
+    if (result.patches && result.patches.length) {
+        h += '<button class="menu_button lbc-btn-success" id="lbc-opt-apply"><i class="fa-solid fa-check"></i> ' + esc(T('optApply')) + '</button>';
+    }
+    h += '</div></div>';
+
+    $('#lbc-opt-modal, #lbc-opt-overlay').remove();
+    document.body.insertAdjacentHTML('beforeend', h);
+}
+
+/* ── modal events (bind once, inside bindPanelEvents) ── */
+function lbcBindOptimizerEvents() {
+    $(document).on('click', '#lbc-opt-close, #lbc-opt-overlay', function () {
+        $('#lbc-opt-modal, #lbc-opt-overlay').remove();
+        lbcPendingOpt = null;
+    });
+
+    $(document).on('click', '#lbc-opt-autofix', function () {
+        var log = lbcAutoFix({});
+        L('AutoFix log:', log);
+        renderBody();                       // refresh the entry list behind the modal
+        showStatus(T('optAutoFixed') + ' (' + log.length + ')', 'success');
+        // Stay open and re-render with a fresh audit, so the user can see what
+        // changed and what is left, instead of the modal disappearing.
+        var carried = lbcPendingOpt || {};
+        lbcRenderOptimizeModal({
+            patches: carried.patches || [],
+            duplicates: carried.duplicates || [],
+            contradictions: carried.contradictions || [],
+            llmRan: !!carried.llmRan,
+            audit: lbcAudit()
+        }, log);
+    });
+
+    $(document).on('click', '#lbc-opt-apply', function () {
+        if (!lbcPendingOpt) return;
+        var sel = [];
+        $('.lbc-opt-cb:checked').each(function () { sel.push(parseInt($(this).data('pi'))); });
+        var n = lbcApplyPatches(lbcPendingOpt.patches || [], sel);
+        $('#lbc-opt-modal, #lbc-opt-overlay').remove();
+        lbcPendingOpt = null;
+        renderBody();
+        showStatus(T('optApplied') + ': ' + n, 'success');
+    });
+
+    /* toolbar button (also rendered inside the modal footer) */
+    $(document).on('click', '.lbc-optimize-btn', async function () {
+        if (lbcBusy) return;
+        $('#lbc-opt-modal, #lbc-opt-overlay').remove();   // if fired from inside the modal
+        lbcPendingOpt = null;
+        lbcBusy = true;
+        var $b = $(this).prop('disabled', true).html('<i class="fa-solid fa-circle-notch fa-spin"></i> ' + T('optimizing'));
+        try {
+            var res = await lbcLLMOptimize();
+            res.llmRan = true;
+            lbcRenderOptimizeModal(res);
+        } catch (err) {
+            E(err);
+            showStatus(err.message, 'error');
+        }
+        lbcBusy = false;
+        $b.prop('disabled', false).html('<i class="fa-solid fa-bolt"></i> ' + esc(T('optimize')));
+    });
+
+    /* audit-only: instant, no LLM call at all */
+    $(document).on('click', '.lbc-audit-btn', function () {
+        lbcRenderOptimizeModal({ patches: [], duplicates: [], contradictions: [], llmRan: false, audit: lbcAudit() });
+    });
+}
+
+/* ══════════════════════════════════════
+   LOREBOOK FROM LORE  (v1.11)
+
+   Character Library hands over { world, entries, wholeWorld } from its
+   lorebook browser; the user picks a mode, the LLM builds a NEW standalone
+   lorebook out of that canon and it lands in the editor as a fresh draft.
+   ══════════════════════════════════════ */
+
+var lbcFLState = null;
+
+var LBC_FL_MODES = {
+    deep: 'DEEP-DIVE. Unpack the source entries into a full standalone lorebook: split dense entries apart, give every named person, place, faction and concept its own entry, and add the connective tissue (history, rules, relations) that the source implies but never states. Do NOT invent an unrelated new setting — stay inside exactly this material.',
+    spin: 'SPIN-OFF. Grow a NEW corner of the same universe out of the source canon: a new location, faction, era or storyline that is consistent with the source entries and clearly connected to them, yet stands as its own lorebook. Reuse source names only where the connection needs them; the bulk of the entries must be new.',
+    clean: 'RESTRUCTURE. Rebuild ONLY the source material into a clean standalone lorebook: deduplicate, harmonize naming, tone and terminology, fix trigger keys, split or merge entries where the structure demands it. Invent nothing beyond minimal connective wording.',
+};
+
+function lbcFLSourceBlock(entries) {
+    var CONTENT_CAP = 700;
+    return entries.map(function (e, i) {
+        var c = String(e.content || '').replace(/\s+/g, ' ').trim();
+        if (c.length > CONTENT_CAP) c = c.substring(0, CONTENT_CAP) + '…';
+        return (i + 1) + '. ' + (e.title || 'Untitled') +
+            ' (keys: ' + (e.keys || []).join(', ') + ')\n   ' + c;
+    }).join('\n');
+}
+
+function lbcShowFromLoreModal(payload) {
+    $('#lbc-fl-modal, #lbc-fl-overlay').remove();
+    var entries = (payload && payload.entries) ? payload.entries : [];
+    if (!entries.length) { showStatus(T('flNoSources'), 'error'); return; }
+    lbcFLState = { world: payload.world || '', entries: entries, off: {} };
+
+    var chips = entries.map(function (e, i) {
+        var c = String(e.content || '').replace(/\s+/g, ' ').trim();
+        return '<div class="lbc-fl-entry" data-i="' + i + '">'
+            + '<div class="lbc-fl-etitle">' + esc(e.title || 'Untitled') + '</div>'
+            + '<div class="lbc-fl-etext">' + esc(c.substring(0, 160)) + (c.length > 160 ? '…' : '') + '</div>'
+            + '</div>';
+    }).join('');
+
+    var h = '<div id="lbc-fl-overlay"></div><div id="lbc-fl-modal">';
+    h += '<div class="lbc-opt-head"><b><i class="fa-solid fa-book-medical"></i> ' + esc(T('flTitle')) + ' — ' + esc(lbcFLState.world) + '</b>';
+    h += '<button class="menu_button" id="lbc-fl-close"><i class="fa-solid fa-xmark"></i></button></div>';
+    h += '<div class="lbc-fl-body">';
+    h += '<div class="lbc-opt-section">' + esc(T('flSources')) + ' (' + entries.length + ')</div>';
+    h += '<div class="lbc-fl-entries">' + chips + '</div>';
+    h += '<div class="lbc-fl-grid">';
+    h += '<div><label class="lbc-fl-lbl">' + esc(T('flMode')) + '</label><select id="lbc-fl-mode" class="text_pole">';
+    h += '<option value="deep" selected>' + esc(T('flModeDeep')) + '</option>';
+    h += '<option value="spin">' + esc(T('flModeSpin')) + '</option>';
+    h += '<option value="clean">' + esc(T('flModeClean')) + '</option></select></div>';
+    h += '<div><label class="lbc-fl-lbl">' + esc(T('flCount')) + '</label><select id="lbc-fl-count" class="text_pole">';
+    h += '<option value="10">~10</option><option value="20" selected>~20</option><option value="30">~30</option><option value="40">~40</option></select></div>';
+    h += '</div>';
+    h += '<label class="lbc-fl-lbl">' + esc(T('flName')) + '</label>';
+    h += '<input id="lbc-fl-name" class="text_pole" />';
+    h += '<label class="lbc-fl-lbl">' + esc(T('flFocus')) + '</label>';
+    h += '<textarea id="lbc-fl-focus" class="text_pole" rows="2" placeholder="e.g. focus on House politics, ignore the war"></textarea>';
+    h += '</div>';
+    h += '<div class="lbc-fl-foot">';
+    h += '<span id="lbc-fl-status" class="lbc-fl-muted"></span>';
+    h += '<button class="menu_button" id="lbc-fl-gen"><i class="fa-solid fa-bolt"></i> ' + esc(T('flGenerate')) + '</button>';
+    h += '</div></div>';
+
+    $('body').append(h);
+    $('#lbc-fl-close, #lbc-fl-overlay').on('click', function () {
+        $('#lbc-fl-modal, #lbc-fl-overlay').remove(); lbcFLState = null;
+    });
+    $('#lbc-fl-modal').on('click', '.lbc-fl-entry', function () {
+        var i = parseInt($(this).data('i'));
+        lbcFLState.off[i] = !lbcFLState.off[i];
+        $(this).toggleClass('lbc-fl-off', !!lbcFLState.off[i]);
+    });
+    $('#lbc-fl-gen').on('click', function () { lbcRunFromLore(); });
+}
+
+async function lbcRunFromLore() {
+    if (!lbcFLState || lbcBusy) return;
+    if (!genQuiet) { $('#lbc-fl-status').text(T('noLLM')); return; }
+
+    var picked = lbcFLState.entries.filter(function (e, i) { return !lbcFLState.off[i]; });
+    if (!picked.length) { $('#lbc-fl-status').text(T('flNoSources')); return; }
+
+    var mode = $('#lbc-fl-mode').val() || 'deep';
+    var focus = ($('#lbc-fl-focus').val() || '').trim();
+    var forcedName = ($('#lbc-fl-name').val() || '').trim();
+
+    var prompt = PROMPTS.lorebookFromLore
+        .replace('{{SOURCE_WORLD}}', lbcFLState.world || 'unknown')
+        .replace('{{SOURCE_ENTRIES}}', lbcFLSourceBlock(picked))
+        .replace('{{MODE_TASK}}', LBC_FL_MODES[mode] || LBC_FL_MODES.deep)
+        .replace('{{FOCUS_BLOCK}}', focus ? ('USER DIRECTIVE (obey): ' + focus + '\n\n') : '')
+        .replace('{{TARGET_COUNT}}', $('#lbc-fl-count').val() || '20');
+
+    lbcBusy = true;
+    var $b = $('#lbc-fl-gen').prop('disabled', true).html('<i class="fa-solid fa-circle-notch fa-spin"></i> ' + esc(T('flBuilding')));
+    $('#lbc-fl-status').text('');
+    try {
+        var raw = await lbcGenQuiet(prompt);
+        var data = parseJSON(raw);
+        if (!data || !data.entries || !Array.isArray(data.entries) || !data.entries.length)
+            throw new Error(T('flFailed'));
+
+        if (lbcData.entries && lbcData.entries.length) {
+            if (!confirm(T('flReplaceConfirm'))) throw new Error('Cancelled.');
+        }
+
+        var built = normalizeEntries(data.entries);
+        await translateEntriesIfNeeded(built);
+
+        lbcData.entries = built;
+        lbcData.worldName = forcedName || data.worldName || ((lbcFLState.world || 'Lore') + ' — Derived');
+        lbcData.worldDescription = data.worldDescription || '';
+        /* fresh draft, not an existing ST world */
+        lbcData._origWorldName = lbcData.worldName;
+        lbcData._origWorldDesc = lbcData.worldDescription;
+        lbcData._loadedWorld = null;
+        if (lbcData._translated && translateFn) {
+            lbcData.worldName = await tr(lbcData.worldName);
+            if (lbcData.worldDescription) lbcData.worldDescription = await tr(lbcData.worldDescription);
+        }
+
+        lbcAdoptCategories();
+        $('#lbc-fl-modal, #lbc-fl-overlay').remove();
+        lbcFLState = null;
+        lbcShowEntries();
+        showStatus(T('flDone') + ' — ' + built.length + ' ' + T('entriesWord'), 'success');
+    } catch (err) {
+        E('fromLore:', err);
+        $('#lbc-fl-status').text(err.message);
+    }
+    lbcBusy = false;
+    $b.prop('disabled', false).html('<i class="fa-solid fa-bolt"></i> ' + esc(T('flGenerate')));
+}
+
+/* ══════════════════════════════════════
+   BRIDGE — public API for Character Library
+     window.LorebookCreator.openWorld({ world })   // load an existing ST world
+     window.LorebookCreator.open()                 // just open the panel
+     window.LorebookCreator.createFromLore({ world, entries })  // build a NEW book from lore
+   ══════════════════════════════════════ */
+
+/* Pulls a world straight out of SillyTavern (no file picker) and turns it
+   into editable lbcData.entries via the same parser the importer uses. */
+async function lbcFetchWorld(name) {
+    var headers = await getHeaders();
+    var r = await fetch('/api/worldinfo/get', {
+        method: 'POST', headers: headers, body: JSON.stringify({ name: name }),
+    });
+    if (!r.ok) throw new Error('Cannot load "' + name + '" (HTTP ' + r.status + ')');
+    return await r.json();
+}
+
+function lbcAdoptCategories() {
+    if (!lbcData.customCategories) lbcData.customCategories = [];
+    lbcData.entries.forEach(function (en) {
+        var c = (en.category || '').trim();
+        if (!c) return;
+        var lc = c.toLowerCase();
+        var builtin = ENTRY_CATEGORIES.some(function (x) { return x.toLowerCase() === lc; });
+        var have = lbcData.customCategories.some(function (x) { return x.toLowerCase() === lc; });
+        if (!builtin && !have) lbcData.customCategories.push(c);
+    });
+}
+
+function lbcShowEntries() {
+    lbcData.mode = 'advanced';
+    lbcData.activeTab = 'entries';
+    $('.lbc-mode-btn').removeClass('active');
+    $('.lbc-mode-btn[data-mode="advanced"]').addClass('active');
+    $('#lbc-tabs').show();
+    $('.lbc-tab').removeClass('active');
+    $('.lbc-tab[data-tab="entries"]').addClass('active');
+    if (typeof updateFooterButtons === 'function') updateFooterButtons();
+    renderBody();
+}
+
+async function lbcOpenWorld(p) {
+    var name = (typeof p === 'string') ? p : (p && (p.world || p.name));
+    try {
+        togglePanel(true);
+        if (!name) return;
+
+        if (lbcData.entries && lbcData.entries.length && lbcData.worldName !== name) {
+            if (!confirm('Replace the ' + lbcData.entries.length + ' entries currently in the editor with "' + name + '"?')) {
+                return;
+            }
+        }
+
+        showStatus('Loading "' + name + '"...', 'info');
+        var json = await lbcFetchWorld(name);
+        var imported = parseLorebookEntries(json);
+        if (!imported.length) { showStatus('"' + name + '" has no entries.', 'error'); return; }
+
+        lbcData.entries = imported;
+        lbcData.worldName = name;
+        lbcData._origWorldName = name;
+        lbcData._loadedWorld = name;   // marks this as an existing ST world, not a fresh draft
+
+        lbcAdoptCategories();
+        lbcShowEntries();
+        showStatus('Loaded "' + name + '" — ' + imported.length + ' ' + T('entriesWord'), 'success');
+    } catch (e) {
+        E('openWorld:', e);
+        showStatus('Failed: ' + e.message, 'error');
+    }
+}
+
+function exposeLBCApi() {
+    window.LorebookCreator = {
+        version: '1.12.0',
+        open: function () { togglePanel(true); },
+        close: function () { togglePanel(false); },
+        openWorld: lbcOpenWorld,
+        load: lbcOpenWorld,
+        createFromLore: function (p) { togglePanel(true); lbcShowFromLoreModal(p || {}); },
+        getData: function () { return lbcData; },
+    };
+    L('Public API exposed (window.LorebookCreator)');
 }
