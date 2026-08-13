@@ -26,7 +26,7 @@ var LBC_MODULE = 'lorebook-creator';
 var lbcSettings = null;
 var extSettings = null;
 var saveFn = null;
-var scriptModule = null;
+var lbcCtx = null;
 var genQuiet = null;
 var translateFn = null;
 
@@ -707,6 +707,7 @@ var PROMPTS = {
 
 var LBC_DEFAULTS = {
     enabled: true,
+    showMenuItem: false,
     showButton: true,
     panelPosition: 'right'
 };
@@ -725,6 +726,7 @@ async function initLBC() {
         buildPanel();
         buildSettingsPanel();
         buildChatButton();
+        buildMenuItem();
         exposeLBCApi();
         L('Ready! quiet:', !!genQuiet, 'translate:', !!translateFn);
     } catch (e) { E('Init:', e); }
@@ -732,14 +734,11 @@ async function initLBC() {
 
 async function loadModules() {
     try {
-        var m = await import('../../../extensions.js');
-        extSettings = m.extension_settings;
-        saveFn = m.saveSettingsDebounced;
-    } catch (e) { E('ext.js:', e.message); }
-    try {
-        scriptModule = await import('../../../../script.js');
-        if (typeof scriptModule.generateQuietPrompt === 'function') genQuiet = scriptModule.generateQuietPrompt;
-    } catch (e) { E('script.js:', e.message); }
+        lbcCtx = SillyTavern.getContext();
+        extSettings = lbcCtx.extensionSettings;
+        saveFn = lbcCtx.saveSettingsDebounced;
+        genQuiet = lbcCtx.generateQuietPrompt;
+    } catch (e) { E('getContext:', e.message); }
 }
 
 function loadSettings() {
@@ -889,8 +888,8 @@ function parseJSON(t) {
 }
 
 async function getHeaders() {
-    if (scriptModule && typeof scriptModule.getRequestHeaders === 'function')
-        try { return scriptModule.getRequestHeaders(); } catch (e) {}
+    if (lbcCtx && typeof lbcCtx.getRequestHeaders === 'function')
+        try { return lbcCtx.getRequestHeaders(); } catch (e) {}
     var h = { 'Content-Type': 'application/json' };
     try { var r = await fetch('/csrf-token'); if (r.ok) { var d = await r.json(); if (d.token) h['X-CSRF-Token'] = d.token; } } catch (e) {}
     return h;
@@ -2458,9 +2457,9 @@ async function doImportToST() {
     formData.append('file_type', 'world_info');
 
     var headers = {};
-    if (scriptModule && typeof scriptModule.getRequestHeaders === 'function') {
+    if (lbcCtx && typeof lbcCtx.getRequestHeaders === 'function') {
         try {
-            var rh = scriptModule.getRequestHeaders();
+            var rh = lbcCtx.getRequestHeaders();
             for (var k in rh) { if (k.toLowerCase() !== 'content-type') headers[k] = rh[k]; }
         } catch (e) {}
     }
@@ -2910,6 +2909,7 @@ function bindPanelEvents() {
 }
 
 function togglePanel(show) {
+    if (show && !lbcSettings.enabled) return;
     var $p = $('#lbc-panel'); var $ov = $('#lbc-panel-overlay');
     if (show) {
         $p.removeClass('lbc-open lbc-mode-center');
@@ -3520,11 +3520,24 @@ function buildChatButton() {
     if (document.getElementById('lbc-trigger')) return;
     var btn = '<div id="lbc-trigger" class="interactable" title="LoreBook Creator"><i class="fa-solid fa-book-atlas"></i></div>';
     var $l = $('#leftSendForm'); if ($l.length) $l.append(btn); else { var $f = $('#send_form'); if ($f.length) $f.prepend(btn); }
-    $(document).on('click', '#lbc-trigger', function () { if (lbcSettings.enabled) togglePanel(true); });
+    $(document).on('click', '#lbc-trigger', function () { togglePanel(true); });
     syncBtn();
 }
 
 function syncBtn() { $('#lbc-trigger').toggle(!!(lbcSettings.enabled && lbcSettings.showButton)); }
+
+function buildMenuItem() {
+    if (document.getElementById('lbc-menu-item')) return;
+    var $m = $('#extensionsMenu'); if (!$m.length) return;
+    var item = '<div id="lbc-menu-item" class="list-group-item flex-container flexGap5 interactable" tabindex="0">' +
+        '<div class="fa-fw fa-solid fa-book-atlas extensionsMenuExtensionButton"></div>' +
+        '<span>LoreBook Creator</span></div>';
+    $m.append(item);
+    $(document).on('click', '#lbc-menu-item', function () { togglePanel(true); });
+    syncMenuItem();
+}
+
+function syncMenuItem() { $('#lbc-menu-item').toggle(!!(lbcSettings.enabled && lbcSettings.showMenuItem)); }
 
 function buildSettingsPanel() {
     var $c = $('#extensions_settings2'); if (!$c.length) $c = $('#extensions_settings'); if (!$c.length) return;
@@ -3533,6 +3546,7 @@ function buildSettingsPanel() {
     h += '<div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>';
     h += '<div class="inline-drawer-content">';
     h += '<div class="lbc-srow"><label class="checkbox_label"><input type="checkbox" id="lbc-s-on"><span>Enable</span></label></div>';
+    h += '<div class="lbc-srow"><label class="checkbox_label"><input type="checkbox" id="lbc-s-menu"><span>Show in extensions menu</span></label></div>';
     h += '<div class="lbc-srow"><label class="checkbox_label"><input type="checkbox" id="lbc-s-btn"><span>Show chat button</span></label></div>';
     h += '<hr>';
     h += '<div class="lbc-srow"><label>Panel Position</label><select id="lbc-s-pos" class="text_pole" style="max-width:200px"><option value="right">Right Drawer</option><option value="center">Center Modal</option></select></div>';
@@ -3542,7 +3556,8 @@ function buildSettingsPanel() {
     h += '</div></div></div>';
     $c.append(h);
 
-    $('#lbc-s-on').prop('checked', lbcSettings.enabled).on('change', function () { lbcSettings.enabled = this.checked; saveSett(); syncBtn(); });
+    $('#lbc-s-on').prop('checked', lbcSettings.enabled).on('change', function () { lbcSettings.enabled = this.checked; saveSett(); syncBtn(); syncMenuItem(); });
+    $('#lbc-s-menu').prop('checked', lbcSettings.showMenuItem).on('change', function () { lbcSettings.showMenuItem = this.checked; saveSett(); syncMenuItem(); });
     $('#lbc-s-btn').prop('checked', lbcSettings.showButton).on('change', function () { lbcSettings.showButton = this.checked; saveSett(); syncBtn(); });
     $('#lbc-s-pos').val(lbcSettings.panelPosition).on('change', function () { lbcSettings.panelPosition = this.value; saveSett(); applyPanelPosition(); });
     $('#lbc-s-open').on('click', function () { togglePanel(true); });
