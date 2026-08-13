@@ -707,6 +707,7 @@ var PROMPTS = {
 
 var LBC_DEFAULTS = {
     enabled: true,
+    showMenuItem: false,
     showButton: true,
     panelPosition: 'right'
 };
@@ -725,6 +726,7 @@ async function initLBC() {
         buildPanel();
         buildSettingsPanel();
         buildChatButton();
+        buildMenuItem();
         exposeLBCApi();
         L('Ready! quiet:', !!genQuiet, 'translate:', !!translateFn);
     } catch (e) { E('Init:', e); }
@@ -3526,6 +3528,19 @@ function buildChatButton() {
 
 function syncBtn() { $('#lbc-trigger').toggle(!!(lbcSettings.enabled && lbcSettings.showButton)); }
 
+function buildMenuItem() {
+    if (document.getElementById('lbc-menu-item')) return;
+    var $m = $('#extensionsMenu'); if (!$m.length) return;
+    var item = '<div id="lbc-menu-item" class="list-group-item flex-container flexGap5 interactable" tabindex="0">' +
+        '<div class="fa-fw fa-solid fa-book-atlas extensionsMenuExtensionButton"></div>' +
+        '<span>LoreBook Creator</span></div>';
+    $m.append(item);
+    $(document).on('click', '#lbc-menu-item', function () { if (lbcSettings.enabled) togglePanel(true); });
+    syncMenuItem();
+}
+
+function syncMenuItem() { $('#lbc-menu-item').toggle(!!(lbcSettings.enabled && lbcSettings.showMenuItem)); }
+
 function buildSettingsPanel() {
     var $c = $('#extensions_settings2'); if (!$c.length) $c = $('#extensions_settings'); if (!$c.length) return;
     var h = '<div id="lbc-settings"><div class="inline-drawer">';
@@ -3533,6 +3548,7 @@ function buildSettingsPanel() {
     h += '<div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>';
     h += '<div class="inline-drawer-content">';
     h += '<div class="lbc-srow"><label class="checkbox_label"><input type="checkbox" id="lbc-s-on"><span>Enable</span></label></div>';
+    h += '<div class="lbc-srow"><label class="checkbox_label"><input type="checkbox" id="lbc-s-menu"><span>Show in extensions menu</span></label></div>';
     h += '<div class="lbc-srow"><label class="checkbox_label"><input type="checkbox" id="lbc-s-btn"><span>Show chat button</span></label></div>';
     h += '<hr>';
     h += '<div class="lbc-srow"><label>Panel Position</label><select id="lbc-s-pos" class="text_pole" style="max-width:200px"><option value="right">Right Drawer</option><option value="center">Center Modal</option></select></div>';
@@ -3542,7 +3558,8 @@ function buildSettingsPanel() {
     h += '</div></div></div>';
     $c.append(h);
 
-    $('#lbc-s-on').prop('checked', lbcSettings.enabled).on('change', function () { lbcSettings.enabled = this.checked; saveSett(); syncBtn(); });
+    $('#lbc-s-on').prop('checked', lbcSettings.enabled).on('change', function () { lbcSettings.enabled = this.checked; saveSett(); syncBtn(); syncMenuItem(); });
+    $('#lbc-s-menu').prop('checked', lbcSettings.showMenuItem).on('change', function () { lbcSettings.showMenuItem = this.checked; saveSett(); syncMenuItem(); });
     $('#lbc-s-btn').prop('checked', lbcSettings.showButton).on('change', function () { lbcSettings.showButton = this.checked; saveSett(); syncBtn(); });
     $('#lbc-s-pos').val(lbcSettings.panelPosition).on('change', function () { lbcSettings.panelPosition = this.value; saveSett(); applyPanelPosition(); });
     $('#lbc-s-open').on('click', function () { togglePanel(true); });
