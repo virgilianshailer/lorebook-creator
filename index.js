@@ -26,7 +26,7 @@ var LBC_MODULE = 'lorebook-creator';
 var lbcSettings = null;
 var extSettings = null;
 var saveFn = null;
-var scriptModule = null;
+var lbcCtx = null;
 var genQuiet = null;
 var translateFn = null;
 
@@ -734,14 +734,11 @@ async function initLBC() {
 
 async function loadModules() {
     try {
-        var m = await import('../../../extensions.js');
-        extSettings = m.extension_settings;
-        saveFn = m.saveSettingsDebounced;
-    } catch (e) { E('ext.js:', e.message); }
-    try {
-        scriptModule = await import('../../../../script.js');
-        if (typeof scriptModule.generateQuietPrompt === 'function') genQuiet = scriptModule.generateQuietPrompt;
-    } catch (e) { E('script.js:', e.message); }
+        lbcCtx = SillyTavern.getContext();
+        extSettings = lbcCtx.extensionSettings;
+        saveFn = lbcCtx.saveSettingsDebounced;
+        genQuiet = lbcCtx.generateQuietPrompt;
+    } catch (e) { E('getContext:', e.message); }
 }
 
 function loadSettings() {
@@ -891,8 +888,8 @@ function parseJSON(t) {
 }
 
 async function getHeaders() {
-    if (scriptModule && typeof scriptModule.getRequestHeaders === 'function')
-        try { return scriptModule.getRequestHeaders(); } catch (e) {}
+    if (lbcCtx && typeof lbcCtx.getRequestHeaders === 'function')
+        try { return lbcCtx.getRequestHeaders(); } catch (e) {}
     var h = { 'Content-Type': 'application/json' };
     try { var r = await fetch('/csrf-token'); if (r.ok) { var d = await r.json(); if (d.token) h['X-CSRF-Token'] = d.token; } } catch (e) {}
     return h;
@@ -2460,9 +2457,9 @@ async function doImportToST() {
     formData.append('file_type', 'world_info');
 
     var headers = {};
-    if (scriptModule && typeof scriptModule.getRequestHeaders === 'function') {
+    if (lbcCtx && typeof lbcCtx.getRequestHeaders === 'function') {
         try {
-            var rh = scriptModule.getRequestHeaders();
+            var rh = lbcCtx.getRequestHeaders();
             for (var k in rh) { if (k.toLowerCase() !== 'content-type') headers[k] = rh[k]; }
         } catch (e) {}
     }
@@ -2912,6 +2909,7 @@ function bindPanelEvents() {
 }
 
 function togglePanel(show) {
+    if (show && !lbcSettings.enabled) return;
     var $p = $('#lbc-panel'); var $ov = $('#lbc-panel-overlay');
     if (show) {
         $p.removeClass('lbc-open lbc-mode-center');
@@ -3522,7 +3520,7 @@ function buildChatButton() {
     if (document.getElementById('lbc-trigger')) return;
     var btn = '<div id="lbc-trigger" class="interactable" title="LoreBook Creator"><i class="fa-solid fa-book-atlas"></i></div>';
     var $l = $('#leftSendForm'); if ($l.length) $l.append(btn); else { var $f = $('#send_form'); if ($f.length) $f.prepend(btn); }
-    $(document).on('click', '#lbc-trigger', function () { if (lbcSettings.enabled) togglePanel(true); });
+    $(document).on('click', '#lbc-trigger', function () { togglePanel(true); });
     syncBtn();
 }
 
@@ -3535,7 +3533,7 @@ function buildMenuItem() {
         '<div class="fa-fw fa-solid fa-book-atlas extensionsMenuExtensionButton"></div>' +
         '<span>LoreBook Creator</span></div>';
     $m.append(item);
-    $(document).on('click', '#lbc-menu-item', function () { if (lbcSettings.enabled) togglePanel(true); });
+    $(document).on('click', '#lbc-menu-item', function () { togglePanel(true); });
     syncMenuItem();
 }
 
